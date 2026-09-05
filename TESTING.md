@@ -214,6 +214,23 @@ possible quota exhaustion, not automatically a new code regression —
 check by testing a key directly against the provider's API before
 assuming the bug is in `server.py`.
 
+### Added Cerebras as the primary provider (2026-09-05)
+
+Directly addressed the quota-exhaustion problem above rather than just
+working around it: added Cerebras (`cloud.cerebras.ai`) as a third
+provider, tried first in `correct_sentence()`. It's a genuinely separate,
+fresh free-tier quota (1M tokens/day) on a different account from the
+Gemini keys we'd been hammering all day — spreads real load across
+independent limits instead of collecting more keys against the same one.
+Model: `qwen-3.8-27b` (the smaller of Cerebras' two public models — the
+right fit for a fast, simple correction task, not the larger `gpt-oss-120b`).
+
+Verified with 5 consecutive real requests: consistently 1.0-1.3s each,
+correct every time — noticeably faster and more reliable than Gemini was
+even before today's quota pressure. Full test suite re-run afterward:
+all 6 cases pass, no errors, healthy 2.7-2.9s (one 4.2s hedge outlier,
+still correct).
+
 ## Adding a new test case
 
 Add an entry to `tests/cases.json` with a unique `id`, the exact text,

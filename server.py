@@ -123,6 +123,27 @@ def call_groq(key, text):
         return data['choices'][0]['message']['content'].strip()
 
 
+def call_cerebras(key, text):
+    req = urllib.request.Request(
+        'https://api.cerebras.ai/v1/chat/completions',
+        data=json.dumps({
+            'model': 'qwen-3.8-27b',
+            'temperature': 0,
+            'messages': [
+                {'role': 'system', 'content': SYSTEM_PROMPT},
+                {'role': 'user', 'content': text},
+            ],
+        }).encode('utf-8'),
+        headers={
+            'Authorization': f'Bearer {key}',
+            'Content-Type': 'application/json',
+        },
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+        return data['choices'][0]['message']['content'].strip()
+
+
 def call_gemini(key, text):
     req = urllib.request.Request(
         f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={key}',
@@ -205,16 +226,27 @@ def _race(call_fn, keys, text, hedge_delay=1.5):
 
 
 def correct_sentence(text):
-    # Gemini first: Groq's API rejected every key here with "Access denied,
-    # check your network settings" — likely this network's egress, not the
-    # keys themselves — so it's kept only as a fallback in case that clears.
+    # Cerebras first: a separate, fresh, much larger free-tier quota
+    # (1M tokens/day) from an entirely different account than the Gemini
+    # keys we'd been hammering all day — spreads load across independent
+    # limits instead of stacking more keys against the same one. Gemini
+    # is the fallback, Groq last (its API has rejected every key here with
+    # "Access denied, check your network settings" — likely this network's
+    # egress, not the keys themselves — so it's kept only in case that clears).
+    result, cerebras_errors = _race(call_cerebras, ordered_keys('CEREBRAS_API_KEY'), text)
+    if result is not None:
+        return result, None
     result, gemini_errors = _race(call_gemini, ordered_keys('GEMINI_API_KEY'), text)
     if result is not None:
         return result, None
     result, groq_errors = _race(call_groq, ordered_keys('GROQ_API_KEY'), text)
     if result is not None:
         return result, None
-    errors = [f'gemini: {e}' for e in gemini_errors] + [f'groq: {e}' for e in groq_errors]
+    errors = (
+        [f'cerebras: {e}' for e in cerebras_errors]
+        + [f'gemini: {e}' for e in gemini_errors]
+        + [f'groq: {e}' for e in groq_errors]
+    )
     return None, '; '.join(errors) or 'no API keys configured in .env'
 
 
@@ -363,7 +395,9 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8756
+    cerebras_n = len(ordered_keys('CEREBRAS_API_KEY'))
     groq_n = len(ordered_keys('GROQ_API_KEY'))
     gemini_n = len(ordered_keys('GEMINI_API_KEY'))
-    print(f'lag-writer serving on http://localhost:{port}  (groq keys: {groq_n}, gemini keys: {gemini_n})')
+    print(f'lag-writer serving on http://localhost:{port}  '
+          f'(cerebras keys: {cerebras_n}, groq keys: {groq_n}, gemini keys: {gemini_n})')
     ThreadingHTTPServer(('localhost', port), Handler).serve_forever()
