@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lag-writer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>lag-writer</h1>
+  <p class="sub">Type normally. Words more than a few behind your cursor get auto-corrected in place.</p>
+
+  <textarea id="editor" placeholder="Start typing... try 'i dont think its gonna rain tbh'" autofocus></textarea>
+
+  <div class="controls">
+    <label>Lag (words behind cursor):
+      <input id="lag" type="number" value="5" min="0" max="30" style="width:50px">
+    </label>
+  </div>
+
+  <div class="log" id="log"></div>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
