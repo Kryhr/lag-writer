@@ -7,11 +7,18 @@ because the real ones cost money.
 
 See [PLAN.md](PLAN.md) for the phased build plan.
 
-## Phase 1 (current): local demo, no API key needed
+## Phase 1 (current): full Docs-style editor, no API key needed
 
-Just open `index.html` in a browser. Type normally — words that fall more
-than ~5 words behind your cursor get auto-corrected in place using local
-rules (no network calls, no API key).
+`index.html` is a Google Docs-style document editor (title, menu bar,
+formatting toolbar — bold/italic/underline, fonts, sizes, colors, alignment,
+lists, links). Type normally; a few words behind your cursor, and instantly
+whenever you finish a sentence with `.`/`!`/`?`, the correction engine
+silently fixes typos, missing apostrophes, and shorthand (tbh, lmk, u, idk...)
+and capitalizes "I" and sentence starts — no network calls, no API key.
+
+Since it's plain ES modules, it needs to be served over HTTP rather than
+opened as a `file://` URL — e.g. `python -m http.server` in this folder,
+then visit `http://localhost:<port>/`.
 
 ## Phase 2: smarter corrections via a free LLM
 

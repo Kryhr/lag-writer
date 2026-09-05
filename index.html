@@ -3,24 +3,100 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lag-writer</title>
+<title>Untitled document</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main>
-  <h1>lag-writer</h1>
-  <p class="sub">Type normally. Words more than a few behind your cursor get auto-corrected in place.</p>
 
-  <textarea id="editor" placeholder="Start typing... try 'i dont think its gonna rain tbh'" autofocus></textarea>
-
-  <div class="controls">
-    <label>Lag (words behind cursor):
-      <input id="lag" type="number" value="5" min="0" max="30" style="width:50px">
-    </label>
+<header class="topbar">
+  <div class="topbar-row1">
+    <div class="doc-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="36" height="36"><path fill="#4285f4" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path fill="#a5c4fa" d="M15 2v5h5z"/><path fill="#fff" d="M7 12h10v1.4H7zM7 15h10v1.4H7zM7 9h6v1.4H7z"/></svg>
+    </div>
+    <div class="doc-title-block">
+      <input id="docTitle" class="doc-title" value="Untitled document" spellcheck="false">
+      <nav class="menubar" aria-hidden="true">
+        <span>File</span><span>Edit</span><span>View</span><span>Insert</span>
+        <span>Format</span><span>Tools</span><span>Extensions</span><span>Help</span>
+      </nav>
+    </div>
   </div>
+</header>
 
-  <div class="log" id="log"></div>
+<div class="toolbar">
+  <button data-cmd="undo" title="Undo" class="icon-btn">&#8630;</button>
+  <button data-cmd="redo" title="Redo" class="icon-btn">&#8631;</button>
+  <span class="sep"></span>
+
+  <select id="zoom" title="Zoom" class="select-sm">
+    <option value="0.75">75%</option>
+    <option value="1" selected>100%</option>
+    <option value="1.25">125%</option>
+    <option value="1.5">150%</option>
+  </select>
+  <span class="sep"></span>
+
+  <select id="paragraphStyle" title="Styles">
+    <option value="p" selected>Normal text</option>
+    <option value="h1">Heading 1</option>
+    <option value="h2">Heading 2</option>
+    <option value="h3">Heading 3</option>
+    <option value="blockquote">Quote</option>
+  </select>
+
+  <select id="fontFamily" title="Font">
+    <option value="Arial" selected>Arial</option>
+    <option value="Georgia">Georgia</option>
+    <option value="'Times New Roman'">Times New Roman</option>
+    <option value="'Courier New'">Courier New</option>
+    <option value="Verdana">Verdana</option>
+    <option value="'Trebuchet MS'">Trebuchet MS</option>
+  </select>
+
+  <select id="fontSize" title="Font size" class="select-sm">
+    <option value="10">10</option>
+    <option value="11" selected>11</option>
+    <option value="12">12</option>
+    <option value="14">14</option>
+    <option value="18">18</option>
+    <option value="24">24</option>
+    <option value="36">36</option>
+  </select>
+  <span class="sep"></span>
+
+  <button data-cmd="bold" title="Bold" class="icon-btn"><b>B</b></button>
+  <button data-cmd="italic" title="Italic" class="icon-btn"><i>I</i></button>
+  <button data-cmd="underline" title="Underline" class="icon-btn"><u>U</u></button>
+  <button data-cmd="strikeThrough" title="Strikethrough" class="icon-btn"><s>S</s></button>
+
+  <label class="color-swatch" title="Text color">A<input id="textColor" type="color" value="#000000"></label>
+  <label class="color-swatch" title="Highlight color">&#9646;<input id="highlightColor" type="color" value="#fff59d"></label>
+  <span class="sep"></span>
+
+  <button data-cmd="justifyLeft" title="Align left" class="icon-btn">&#8676;</button>
+  <button data-cmd="justifyCenter" title="Align center" class="icon-btn">&#8596;</button>
+  <button data-cmd="justifyRight" title="Align right" class="icon-btn">&#8677;</button>
+  <button data-cmd="justifyFull" title="Justify" class="icon-btn">&#9776;</button>
+  <span class="sep"></span>
+
+  <button data-cmd="insertUnorderedList" title="Bulleted list" class="icon-btn">&#8226;&#8801;</button>
+  <button data-cmd="insertOrderedList" title="Numbered list" class="icon-btn">1.&#8801;</button>
+  <button data-cmd="outdent" title="Decrease indent" class="icon-btn">&#8676;&#8942;</button>
+  <button data-cmd="indent" title="Increase indent" class="icon-btn">&#8677;&#8942;</button>
+  <span class="sep"></span>
+
+  <button id="linkBtn" title="Insert link" class="icon-btn">&#128279;</button>
+  <button data-cmd="removeFormat" title="Clear formatting" class="icon-btn">Tx</button>
+</div>
+
+<main class="canvas">
+  <div class="page-shell">
+    <div id="page" class="page" contenteditable="true" spellcheck="false">
+      <p><br></p>
+    </div>
+  </div>
 </main>
+
 <script type="module" src="app.js"></script>
 </body>
 </html>

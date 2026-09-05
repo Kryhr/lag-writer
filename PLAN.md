@@ -54,6 +54,8 @@ extensions, using free-tier Groq/Gemini API keys instead of a subscription.
 
 ## Current status
 - [x] Repo scaffolded
-- [ ] Phase 1 local-rules demo
+- [x] Phase 1 local-rules demo, rebuilt as a full Docs-style rich text editor
+      (toolbar formatting, silent background corrections, sentence-boundary
+      trigger, auto-capitalization)
 - [ ] Phase 2 LLM smart pass
 - [ ] Phase 3 browser extension

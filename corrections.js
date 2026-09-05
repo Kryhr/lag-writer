@@ -1,6 +1,7 @@
 // Local, offline correction rules — no API calls, no key needed.
 // Each entry maps a lowercase "wrong" word to its fix. Case of the original
-// word is preserved on the way back out (see applyWord below).
+// word is preserved on the way back out (see correctWord below), except
+// where a sentence-start capitalization is explicitly requested.
 
 export const CONTRACTIONS = {
   dont: "don't", wont: "won't", cant: "can't", isnt: "isn't", wasnt: "wasn't",
@@ -11,7 +12,10 @@ export const CONTRACTIONS = {
   theyre: "they're", theyve: "they've", theyll: "they'll", theyd: "they'd",
   were: "we're", weve: "we've", well: "we'll", wed: "we'd",
   hes: "he's", shes: "she's", its: "it's", thats: "that's", whats: "what's",
-  lets: "let's", whos: "who's",
+  lets: "let's", whos: "who's", theres: "there's", heres: "here's",
+  wheres: "where's", whens: "when's", cannot: "cannot", mustnt: "mustn't",
+  neednt: "needn't", shant: "shan't", aint: "ain't", yall: "y'all",
+  ma: "ma'am", oclock: "o'clock",
 };
 
 export const SHORTHAND = {
@@ -20,6 +24,12 @@ export const SHORTHAND = {
   fyi: "for your information", rn: "right now", asap: "as soon as possible",
   omw: "on my way", nvm: "never mind", ngl: "not gonna lie",
   irl: "in real life", afaik: "as far as I know", iirc: "if I recall correctly",
+  smh: "shaking my head", tho: "though", thru: "through", cuz: "because",
+  bc: "because", bcuz: "because", gonna: "going to", wanna: "want to",
+  gotta: "got to", kinda: "kind of", sorta: "sort of", dunno: "don't know",
+  ppl: "people", u: "you", ur: "your", r: "are", pls: "please", plz: "please",
+  thx: "thanks", ty: "thank you", np: "no problem", omg: "oh my god",
+  brb: "be right back", jk: "just kidding", tbf: "to be fair",
 };
 
 export const TYPOS = {
@@ -33,9 +43,25 @@ export const TYPOS = {
   maintainance: "maintenance", noticable: "noticeable", occassion: "occasion",
   posession: "possession", priviledge: "privilege", publically: "publicly",
   reccommend: "recommend", relevent: "relevant", tommorow: "tomorrow",
+  begining: "beginning", calender: "calendar", categoried: "categorized",
+  comitted: "committed", definitly: "definitely", diffrent: "different",
+  extremly: "extremely", febuary: "february", finaly: "finally",
+  happend: "happened", imediately: "immediately",
+  intrested: "interested", knowlege: "knowledge", lenght: "length",
+  libary: "library", medeval: "medieval", mispell: "misspell",
+  origional: "original", peice: "piece", pharoah: "pharaoh",
+  posible: "possible", prefered: "preferred", probaly: "probably",
+  pronounciation: "pronunciation", questionaire: "questionnaire",
+  recomend: "recommend", rythm: "rhythm", secratary: "secretary",
+  sincerly: "sincerely", speach: "speech", succesful: "successful",
+  suprised: "surprised", supress: "suppress", threshhold: "threshold",
+  truely: "truly", twelth: "twelfth", underate: "underrate",
+  unfortunatly: "unfortunately", wether: "whether", yeild: "yield",
 };
 
-const ALL_RULES = { ...TYPOS, ...CONTRACTIONS, ...SHORTHAND };
+export const STANDALONE = { i: 'I' };
+
+const ALL_RULES = { ...TYPOS, ...CONTRACTIONS, ...SHORTHAND, ...STANDALONE };
 
 function matchCase(sample, target) {
   if (sample === sample.toUpperCase() && sample !== sample.toLowerCase()) {
@@ -47,23 +73,48 @@ function matchCase(sample, target) {
   return target;
 }
 
+function capitalizeFirst(str) {
+  for (let i = 0; i < str.length; i++) {
+    if (/[a-zA-Z]/.test(str[i])) {
+      return str.slice(0, i) + str[i].toUpperCase() + str.slice(i + 1);
+    }
+  }
+  return str;
+}
+
 // Strip leading/trailing punctuation so "pizza." still matches "pizza".
 function splitPunct(word) {
   const m = word.match(/^(\W*)(.*?)(\W*)$/s);
   return { lead: m[1], core: m[2], trail: m[3] };
 }
 
-export function correctWord(word) {
+export function correctWord(word, { sentenceStart = false } = {}) {
   const { lead, core, trail } = splitPunct(word);
   if (!core) return word;
   const fix = ALL_RULES[core.toLowerCase()];
-  if (!fix) return word;
-  return lead + matchCase(core, fix) + trail;
+  let result = fix ? matchCase(core, fix) : core;
+  if (sentenceStart) result = capitalizeFirst(result);
+  return lead + result + trail;
 }
 
-export function correctChunk(text) {
-  return text
-    .split(/(\s+)/)
-    .map((token) => (/^\s+$/.test(token) ? token : correctWord(token)))
-    .join('');
+// True if the word starting at `spanStart` in `text` begins a new sentence:
+// either it's the very first thing in the document, or the nearest preceding
+// non-whitespace character is a sentence terminator.
+export function isSentenceStart(text, spanStart) {
+  let i = spanStart - 1;
+  while (i >= 0 && /\s/.test(text[i])) i--;
+  if (i < 0) return true;
+  return /[.!?]/.test(text[i]);
+}
+
+// True if the nearest non-whitespace character before the caret is a
+// sentence terminator — used to trigger an immediate full-sentence
+// correction pass rather than waiting for the lag window to catch up.
+// Skips trailing whitespace so "tomorrow. " (period then space) still
+// counts, even if the debounce only fires after both characters landed.
+export function justCompletedSentence(text, caretOffset) {
+  let i = caretOffset - 1;
+  while (i >= 0 && /\s/.test(text[i])) i--;
+  if (i < 0) return false;
+  return /[.!?]/.test(text[i]);
 }
