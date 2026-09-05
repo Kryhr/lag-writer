@@ -33,5 +33,12 @@
     "tags": ["possessive-safety", "no-false-positive", "regression-guard"],
     "addedDate": "2026-09-04",
     "note": "Guards against a real bug we shipped and caught once already: blindly forcing its -> it's broke correct possessive usage. This sentence is already grammatically correct and MUST come back unchanged (or only re-punctuated), never rewritten."
+  },
+  {
+    "id": "mid-sentence-typo-1",
+    "text": "the pizza was great, but i think that i would rather eat steek, though maybe one day i will learn how to cook it on my own.",
+    "tags": ["mid-sentence-latency", "comma-boundary", "user-reported"],
+    "addedDate": "2026-09-05",
+    "note": "The user's real dogfooding input, verbatim (with their actual 'steek' typo for 'steak'). Originally sat uncorrected until the final period even though it came right after a comma, several words earlier — this is what motivated sending clauses to the LLM at comma boundaries too, not just sentence-ending punctuation. When run through tests/run_tests.py (server-only, no lag window), this exercises the LLM's single-clause-fragment handling rather than the timing fix itself — the timing improvement is only observable in the live browser, not this isolated endpoint test."
   }
 ]

@@ -17,18 +17,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 SYSTEM_PROMPT = (
     "You are a background grammar, spelling, and punctuation correction engine "
-    "embedded in a word processor. You will receive a single sentence. Return "
-    "ONLY the corrected sentence: fix spelling, grammar (subject-verb "
-    "agreement, tense, pronoun case, double negatives, dangling modifiers), "
-    "commonly confused words (their/there/they're, your/you're, its/it's, "
-    "affect/effect, then/than), run-on sentences and comma splices, sentence "
-    "fragments, and punctuation — commas, sentence-ending punctuation, "
-    "quotation marks, apostrophes, capitalization. Preserve the user's own "
-    "words, meaning, and tone as closely as possible — do not rephrase, "
-    "reword, or add stylistic flourishes beyond what's needed to fix an "
-    "actual error. NEVER insert an em dash (—). If the sentence is already "
-    "correct, return it unchanged, with no commentary, quotes, or "
-    "explanation."
+    "embedded in a word processor. You will receive either a complete "
+    "sentence or a clause fragment ending in a comma (sent early, before "
+    "the user has finished the whole sentence, so a mid-sentence typo "
+    "doesn't have to wait). Return ONLY the corrected text: fix spelling, "
+    "grammar (subject-verb agreement, tense, pronoun case, double "
+    "negatives, dangling modifiers), commonly confused words (their/"
+    "there/they're, your/you're, its/it's, affect/effect, then/than), run-"
+    "on sentences and comma splices, sentence fragments, and punctuation — "
+    "commas, sentence-ending punctuation, quotation marks, apostrophes, "
+    "capitalization. If the input ends in a comma, it is NOT the end of "
+    "the sentence — keep it ending in a comma (do not add a period or "
+    "capitalize a following word that isn't there) unless the comma "
+    "itself is the actual error. The input may also be a fragment cut from "
+    "the MIDDLE of a longer sentence you can't see the start of (sent this "
+    "way so a mid-sentence typo doesn't have to wait for the whole "
+    "sentence to finish) — if it starts with a lowercase conjunction or "
+    "subordinator (and, but, or, so, because, though, although, since, "
+    "while, yet), that lowercase start is very likely correct as a "
+    "sentence continuation, not an error to capitalize. Preserve the "
+    "user's own words, meaning, "
+    "and tone as closely as possible — do not rephrase, reword, or add "
+    "stylistic flourishes beyond what's needed to fix an actual error. "
+    "NEVER insert an em dash (—). If the text is already correct, return "
+    "it unchanged, with no commentary, quotes, or explanation."
 )
 
 
@@ -75,10 +87,14 @@ def ordered_keys(prefix):
     return keys[start:] + keys[:start]
 
 
-# 6s per key/provider: gemini-3.5-flash-lite normally answers in well under
-# 2s, so this is generous headroom for one call while still keeping the
-# worst case (every configured key hanging) bounded — with 15s per key we
-# once saw a request pile up past 20s total trying multiple keys in a row.
+# 5s per key/provider: gemini-3.5-flash-lite normally answers in well under
+# 2s, so this is still generous headroom for one call. Kept short
+# deliberately because correct_sentence() can fall through several keys
+# sequentially (we have 3 Gemini + 2 Groq configured) — comma-boundary
+# checks mean several requests can land in the same instant (fast typing,
+# or a paste), so a real request has genuinely needed 2-3 key attempts
+# before succeeding. The client's own abort timeout (app.js) is sized to
+# tolerate the worst case of every key here timing out in sequence.
 def call_groq(key, text):
     req = urllib.request.Request(
         'https://api.groq.com/openai/v1/chat/completions',
@@ -95,7 +111,7 @@ def call_groq(key, text):
             'Content-Type': 'application/json',
         },
     )
-    with urllib.request.urlopen(req, timeout=6) as resp:
+    with urllib.request.urlopen(req, timeout=5) as resp:
         data = json.loads(resp.read().decode('utf-8'))
         return data['choices'][0]['message']['content'].strip()
 
@@ -110,7 +126,7 @@ def call_gemini(key, text):
         }).encode('utf-8'),
         headers={'Content-Type': 'application/json'},
     )
-    with urllib.request.urlopen(req, timeout=6) as resp:
+    with urllib.request.urlopen(req, timeout=5) as resp:
         data = json.loads(resp.read().decode('utf-8'))
         return data['candidates'][0]['content']['parts'][0]['text'].strip()
 

@@ -12,21 +12,32 @@ const page = document.getElementById('page');
 // Live-adjustable via the toolbar's #lagWords select.
 let LAG_WORDS = 4;
 
-const SMART_CORRECT_TIMEOUT_MS = 7000;
+// Generous on purpose: the server can fall through several keys/providers
+// sequentially (we have 3 Gemini + 2 Groq configured, each with its own 4s
+// timeout) before giving up, so the true worst case is well over 7s — a
+// tighter client timeout was silently dropping in-flight corrections
+// (confirmed via testing: real AbortError, our own timeout firing before
+// a legitimately-slow-but-successful server response ever arrived).
+const SMART_CORRECT_TIMEOUT_MS = 22000;
 
 let correctedUpTo = 0; // word index already scanned, so we don't re-touch active edits
 let smartCheckedUpTo = 0; // char offset up through which sentences were already sent to the LLM
 
-// Finds every complete sentence in [fromOffset, caret) that hasn't been
-// scanned yet — plural, because fast typing can let more than one sentence
-// finish between two debounced passes, and each one still needs its own
-// trip to the LLM rather than only the most recently completed one.
+// Finds every complete sentence OR comma-terminated clause in
+// [fromOffset, caret) that hasn't been scanned yet — plural, because fast
+// typing can let more than one finish between two debounced passes, and
+// each still needs its own trip to the LLM rather than only the most
+// recent. Commas count as a boundary too (not just . ! ?) so a mid-sentence
+// typo doesn't have to wait for the sentence to fully end before the LLM
+// pass gets a chance to catch it — confirmed via real dogfooding: "steek"
+// (misspelled "steak") sat uncorrected until the final period even though
+// it came right after a comma, several words earlier.
 function findNewSentences(text, caret, fromOffset) {
   const sentences = [];
   let start = fromOffset;
   while (start < caret && /\s/.test(text[start])) start++;
   for (let i = start; i < caret; i++) {
-    if (/[.!?]/.test(text[i])) {
+    if (/[.!?,]/.test(text[i])) {
       const end = i + 1;
       if (end > start) sentences.push({ start, end });
       start = end;
@@ -36,7 +47,26 @@ function findNewSentences(text, caret, fromOffset) {
   return sentences;
 }
 
-function requestSmartCorrection(blockInfos, start, end) {
+// The LLM sees only the fragment we send it, so if a mid-sentence
+// fragment happens to start with a lowercase word (correctly — it's a
+// continuation, not a new sentence), the model can still misjudge it as a
+// sentence start and capitalize it anyway (seen in testing: "though maybe
+// one day..." sent alone came back "Though maybe..."). We already know for
+// certain whether this fragment is a true sentence start (isSentenceStart,
+// computed from the FULL document, not just the fragment) — that's ground
+// truth the model doesn't have, so enforce it rather than trust the model's
+// guess on this one specific thing.
+function enforceFragmentCasing(original, corrected, sentenceStart) {
+  if (sentenceStart || !original.length || !corrected.length) return corrected;
+  const origFirstIsLower = original[0] === original[0].toLowerCase();
+  const correctedFirstIsUpper = corrected[0] !== corrected[0].toLowerCase();
+  if (origFirstIsLower && correctedFirstIsUpper) {
+    return corrected[0].toLowerCase() + corrected.slice(1);
+  }
+  return corrected;
+}
+
+function requestSmartCorrection(blockInfos, start, end, sentenceStart) {
   // Wrap first so the sentence shows a "checking grammar" squiggly while
   // in flight; the snapshot used for the eventual replacement is derived
   // from the wrapper itself (never captured before wrapping — wrapping can
@@ -60,8 +90,10 @@ function requestSmartCorrection(blockInfos, start, end) {
   })
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
-      if (!data || !data.corrected || data.corrected === snap.text) return;
-      if (applySnapshotReplacement(snap, data.corrected)) {
+      if (!data || !data.corrected) return;
+      const corrected = enforceFragmentCasing(snap.text, data.corrected, sentenceStart);
+      if (corrected === snap.text) return;
+      if (applySnapshotReplacement(snap, corrected)) {
         // Offsets past this point may now be off (the replacement can be a
         // different length); a full harmless rescan next keystroke is cheap
         // since both correction passes are idempotent.
@@ -116,7 +148,9 @@ function process() {
   if (smartCheckedUpTo > finalCaret) smartCheckedUpTo = 0; // e.g. user deleted text
   const fresh = edits.length ? buildDocModel(page) : { text, blockInfos: finalBlockInfos };
   const newSentences = findNewSentences(fresh.text, finalCaret, smartCheckedUpTo);
-  for (const s of newSentences) requestSmartCorrection(fresh.blockInfos, s.start, s.end);
+  for (const s of newSentences) {
+    requestSmartCorrection(fresh.blockInfos, s.start, s.end, isSentenceStart(fresh.text, s.start));
+  }
   if (newSentences.length) smartCheckedUpTo = newSentences[newSentences.length - 1].end;
 }
 

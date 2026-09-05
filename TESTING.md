@@ -103,6 +103,41 @@ under rapid repeated use — an inherent property of relying on free API
 tiers, not something fully solvable without paying for dedicated capacity.
 Worth tracking over time via the test log rather than treating as solved.
 
+### Mid-sentence latency + fragment-casing investigation (2026-09-05)
+
+User dogfooding (**mid-sentence-typo-1**) surfaced two more real bugs:
+
+1. "steek" (misspelled "steak") sat uncorrected until the sentence's final
+   period even though it came right after a comma several words earlier —
+   the smart-correction dispatch only ever triggered on `. ! ?`, never on
+   commas. Fixed: commas now count as a dispatch boundary too, so each
+   comma-delimited clause gets its own trip to the LLM as soon as it's
+   typed, not just the whole sentence at the end.
+2. This surfaced a second, more subtle bug: sending an isolated mid-
+   sentence clause (e.g. "though maybe one day...") gives the model no way
+   to know it's a *continuation*, not a new sentence — it capitalized
+   "Though" anyway, even after the system prompt was updated to explicitly
+   warn about this exact case (a lowercase conjunction/subordinator start
+   is very likely correct). Prompting alone wasn't reliable enough. Fixed
+   properly instead: since our own code already knows for certain whether
+   a dispatched fragment is a true sentence start (`isSentenceStart`,
+   computed from the *whole* document, which the model never sees), we now
+   enforce that client-side after the fact — if we know it's not a
+   sentence start and the model capitalized it anyway, we force it back
+   down rather than trust the model's guess on this one specific thing.
+
+Also found while testing this: comma-boundary dispatch means several
+requests can now land in the same instant under fast/burst typing, so a
+single request more often needs 2-3 sequential key attempts before
+succeeding (each attempt bounded to 5s) — the client's own abort timeout
+was tightened to 7s during the earlier latency investigation, which was
+short enough to abort a legitimately-slow-but-still-successful request
+before it ever came back, silently dropping the correction entirely (not
+just delaying it — confirmed via a real `AbortError` in the console).
+Widened to 22s (comfortably over the worst-case sequential chain through
+all 5 configured keys) so a correction is only ever lost if every key
+genuinely fails, never just because it took a while.
+
 ## Adding a new test case
 
 Add an entry to `tests/cases.json` with a unique `id`, the exact text,
