@@ -231,6 +231,38 @@ even before today's quota pressure. Full test suite re-run afterward:
 all 6 cases pass, no errors, healthy 2.7-2.9s (one 4.2s hedge outlier,
 still correct).
 
+### Cerebras quota exhausted same-day + a model-artifact glitch (2026-09-05)
+
+User reported the pending squiggly seeming to linger/appear "randomly"
+and a word ("text") getting corrupted into "tetext" in the output.
+Investigated both:
+
+- **Squiggly timing**: retested extensively (fast typing straight into
+  the next sentence with zero pause, polling pending-span state every
+  200-300ms) and could not reproduce anything but correct behavior —
+  appears while a check is in flight, clears the moment it resolves. This
+  is very likely just normal latency variance being visible/invisible
+  depending on how fast the provider answers at that moment, not a bug.
+- **"tetext" corruption**: called the exact same clause 3 times directly
+  against the server. Two calls failed outright (see below); the one
+  that succeeded came back completely clean, no corruption. Given it
+  didn't reproduce across repeated identical calls, this looks like a
+  one-off decoding artifact from the smaller model (`qwen-3.8-27b`) — a
+  known category of LLM failure (rare stray/duplicated token), not
+  something in our deterministic code that a fix could target.
+
+**The bigger finding**: those 2 failed calls errored as `cerebras: HTTP
+Error 403: Forbidden`. Checked the Cerebras key directly — `402 Payment
+required ... quota` — **its 1M-tokens/day free quota is already
+exhausted**, same day it was added, from the combined weight of my own
+testing and real usage. Gemini was already strained from earlier today
+too, so the fallback chain is now Cerebras (dead) → Gemini (timing out)
+→ Groq (network-blocked, as always) — a much emptier chain than it looks
+on paper, which explains today's renewed slowness/failures. Nothing to
+fix here; it should recover once quotas reset (daily), and it's a strong
+signal to go easier on repeated diagnostic testing against live keys —
+every test call spends real quota the user needs for actual usage.
+
 ## Adding a new test case
 
 Add an entry to `tests/cases.json` with a unique `id`, the exact text,
