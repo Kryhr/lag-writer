@@ -15,12 +15,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 SYSTEM_PROMPT = (
-    "You are a background grammar and spelling correction engine embedded in a "
-    "word processor. You will receive a single sentence. Return ONLY the "
-    "corrected sentence with spelling and grammar errors fixed, preserving the "
-    "original meaning, tone, and style (contractions, capitalization) as "
-    "closely as possible. Do not add commentary, quotes, or explanations. If "
-    "the sentence is already correct, return it unchanged."
+    "You are a background grammar, spelling, and punctuation correction engine "
+    "embedded in a word processor. You will receive a single sentence. Return "
+    "ONLY the corrected sentence: fix spelling, grammar (subject-verb "
+    "agreement, tense, pronoun case), and punctuation — commas, sentence-"
+    "ending punctuation, quotation marks, apostrophes, capitalization. "
+    "Preserve the user's own words, meaning, and tone as closely as possible "
+    "— do not rephrase, reword, or add stylistic flourishes beyond what's "
+    "needed to fix an actual error. NEVER insert an em dash (—). If the "
+    "sentence is already correct, return it unchanged, with no commentary, "
+    "quotes, or explanation."
 )
 
 
@@ -76,7 +80,7 @@ def call_groq(key, text):
 
 def call_gemini(key, text):
     req = urllib.request.Request(
-        f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={key}',
+        f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={key}',
         data=json.dumps({
             'contents': [{'parts': [{'text': f'{SYSTEM_PROMPT}\n\nSentence: {text}'}]}],
         }).encode('utf-8'),

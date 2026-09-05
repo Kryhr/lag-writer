@@ -60,4 +60,10 @@ extensions, using free-tier Groq/Gemini API keys instead of a subscription.
 - [x] Phase 2 LLM smart pass — server.py proxies each completed sentence to
       Groq/Gemini (server-side only, key never reaches the browser) and
       silently patches in real grammar fixes the local dictionary can't catch
+- [x] Phase 2.1 — switched to gemini-3.5-flash-lite (sub-1s vs. 9-42s on
+      3.6-flash), broadened the correction scope to full grammar/punctuation
+      (commas, quotes, capitalization — never em dashes, never rewording),
+      added a live toolbar control for the lag-word distance, native red
+      spellcheck squiggly, and a blue "checking grammar" squiggly while a
+      sentence is in flight to the LLM
 - [ ] Phase 3 browser extension

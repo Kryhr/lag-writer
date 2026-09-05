@@ -62,6 +62,12 @@
     <option value="24">24</option>
     <option value="36">36</option>
   </select>
+  <select id="lagWords" title="AI lag distance" class="select-sm">
+    <option value="2">2 words</option>
+    <option value="4" selected>4 words</option>
+    <option value="6">6 words</option>
+    <option value="10">10 words</option>
+  </select>
   <span class="sep"></span>
 
   <button data-cmd="bold" title="Bold" class="icon-btn"><b>B</b></button>
@@ -91,7 +97,7 @@
 
 <main class="canvas">
   <div class="page-shell">
-    <div id="page" class="page" contenteditable="true" spellcheck="false">
+    <div id="page" class="page" contenteditable="true" spellcheck="true">
       <p><br></p>
     </div>
   </div>

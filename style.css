@@ -163,3 +163,10 @@ select:hover { background: #e8eaed; }
   color: var(--muted);
 }
 .page ul, .page ol { margin: 0 0 8px; padding-left: 24px; }
+
+.grammar-pending {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #4285f4;
+  text-decoration-skip-ink: none;
+}

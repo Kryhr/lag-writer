@@ -202,3 +202,127 @@ export function applySnapshotReplacement(snapshot, replacement) {
   }
   return true;
 }
+
+function firstLastTextNode(el) {
+  let first = null;
+  let last = null;
+  for (const tn of textNodesOf(el)) {
+    if (!first) first = tn;
+    last = tn;
+  }
+  return { first, last };
+}
+
+// Builds a snapshot (same shape as snapshotRange's) from a set of wrapper
+// spans, spanning from the first text node of the first span to the last
+// text node of the last span. Must be called AFTER wrapping, never before —
+// see wrapRangeAsPending's comment for why the order matters.
+function snapshotFromWrapped(spans) {
+  if (!spans.length) return null;
+  const first = firstLastTextNode(spans[0]).first;
+  const last = firstLastTextNode(spans[spans.length - 1]).last;
+  if (!first || !last) return null;
+  const range = document.createRange();
+  range.setStart(first, 0);
+  range.setEnd(last, last.nodeValue.length);
+  return {
+    startNode: first, startOffset: 0,
+    endNode: last, endOffset: last.nodeValue.length,
+    text: range.toString(),
+  };
+}
+
+// Wraps every text node the range touches individually, each in its own
+// clamped sub-range confined to that single node — a range fully inside one
+// Text node can never partially-select a non-Text node, so unlike wrapping
+// the whole range at once, this can't throw. Used when the whole-range fast
+// path in wrapRangeAsPending fails (the range straddles a partial inline
+// formatting boundary, e.g. starts mid-way through a <b> run).
+function wrapEachTextNode(range, nodeArray, className) {
+  // Collect the target nodes fully before mutating anything: surroundContents
+  // changes the live tree (a text node's parent changes), and doing that
+  // while textNodesOf's generator is still mid-walk over that same tree
+  // corrupts its traversal (observed: runaway recursion in textNodesOf).
+  const targets = [];
+  for (const n of nodeArray) {
+    for (const tn of textNodesOf(n)) {
+      if (range.intersectsNode(tn)) targets.push(tn);
+    }
+  }
+
+  const spans = [];
+  for (const tn of targets) {
+    const subRange = document.createRange();
+    subRange.selectNodeContents(tn);
+    if (tn === range.startContainer) subRange.setStart(tn, range.startOffset);
+    if (tn === range.endContainer) subRange.setEnd(tn, range.endOffset);
+    if (subRange.collapsed) continue;
+    const span = document.createElement('span');
+    span.className = className;
+    try {
+      subRange.surroundContents(span);
+      spans.push(span);
+    } catch {
+      // skip just this node — degrade gracefully rather than aborting
+    }
+  }
+  return spans;
+}
+
+// Wraps [start, end) in one or more <span class="grammar-pending"> markers
+// so the UI can show a "pending grammar check" underline while an async
+// correction request is in flight, and returns a ready-to-use replacement
+// snapshot built from the wrapper(s) themselves. Returns null if nothing
+// could be wrapped — callers should fall back to plain snapshotRange in
+// that case; the correction still applies correctly, it just won't have a
+// visible pending indicator.
+//
+// Order matters here: the snapshot MUST be derived from the wrapper spans
+// AFTER wrapping, never captured beforehand. Range.surroundContents() is
+// extract-then-reinsert under the hood — it can splice a text node's data
+// shorter or split it into new node objects, which would silently
+// invalidate any snapshot captured against the pre-wrap nodes.
+export function wrapRangeAsPending(blockInfos, start, end, className = 'grammar-pending') {
+  const bi = blockInfos.find((b) => start >= b.start && end <= b.end);
+  if (!bi) return null;
+  const startPos = findNodeAtOffset(bi.nodeArray, start - bi.start);
+  const endPos = findNodeAtOffset(bi.nodeArray, end - bi.start);
+  if (!startPos || !endPos) return null;
+
+  const range = document.createRange();
+  range.setStart(startPos.node, startPos.offset);
+  range.setEnd(endPos.node, endPos.offset);
+  if (range.collapsed) return null;
+
+  let spans;
+  try {
+    const span = document.createElement('span');
+    span.className = className;
+    range.surroundContents(span);
+    spans = [span];
+  } catch {
+    spans = wrapEachTextNode(range, bi.nodeArray, className);
+  }
+  if (!spans.length) return null;
+
+  const snapshot = snapshotFromWrapped(spans);
+  if (!snapshot) {
+    unwrapPendingSpans(spans);
+    return null;
+  }
+  return { spans, snapshot };
+}
+
+// Removes wrapper spans created by wrapRangeAsPending, hoisting each span's
+// children back to its parent in place. Safe to call unconditionally (e.g.
+// from a fetch's .finally()) regardless of outcome: a span whose content
+// was already replaced by applySnapshotReplacement is simply no longer in
+// the document, so it's skipped rather than erroring.
+export function unwrapPendingSpans(spans) {
+  for (const span of spans) {
+    if (!span.isConnected) continue;
+    const parent = span.parentNode;
+    while (span.firstChild) parent.insertBefore(span.firstChild, span);
+    parent.removeChild(span);
+  }
+}

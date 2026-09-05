@@ -2,13 +2,17 @@ import { correctWord, isSentenceStart, justCompletedSentence } from './correctio
 import {
   buildDocModel, getCaretGlobalOffset, setCaretGlobalOffset,
   replaceGlobalRange, snapshotRange, applySnapshotReplacement,
+  wrapRangeAsPending, unwrapPendingSpans,
 } from './domtext.js';
 
 const page = document.getElementById('page');
 
 // How many words behind the cursor stay untouched (still "being written").
 // A completed sentence (ends in . ! ?) is corrected immediately regardless.
-const LAG_WORDS = 4;
+// Live-adjustable via the toolbar's #lagWords select.
+let LAG_WORDS = 4;
+
+const SMART_CORRECT_TIMEOUT_MS = 7000;
 
 let correctedUpTo = 0; // word index already scanned, so we don't re-touch active edits
 let smartCheckedUpTo = 0; // char offset up through which sentences were already sent to the LLM
@@ -33,12 +37,26 @@ function findNewSentences(text, caret, fromOffset) {
 }
 
 function requestSmartCorrection(blockInfos, start, end) {
-  const snap = snapshotRange(blockInfos, start, end);
-  if (!snap || !snap.text.trim()) return;
+  // Wrap first so the sentence shows a "checking grammar" squiggly while
+  // in flight; the snapshot used for the eventual replacement is derived
+  // from the wrapper itself (never captured before wrapping — wrapping can
+  // splice/replace the underlying text nodes, which would invalidate a
+  // pre-wrap snapshot's saved node/offset handles).
+  const wrapped = wrapRangeAsPending(blockInfos, start, end);
+  const snap = wrapped ? wrapped.snapshot : snapshotRange(blockInfos, start, end);
+  if (!snap || !snap.text.trim()) {
+    if (wrapped) unwrapPendingSpans(wrapped.spans);
+    return;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SMART_CORRECT_TIMEOUT_MS);
+
   fetch('/api/correct', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: snap.text }),
+    signal: controller.signal,
   })
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
@@ -51,7 +69,11 @@ function requestSmartCorrection(blockInfos, start, end) {
         smartCheckedUpTo = 0;
       }
     })
-    .catch(() => {}); // offline/rate-limited/etc — local-rules pass already ran
+    .catch(() => {}) // offline/rate-limited/timed out — local-rules pass already ran
+    .finally(() => {
+      clearTimeout(timeout);
+      if (wrapped) unwrapPendingSpans(wrapped.spans);
+    });
 }
 
 function process() {
@@ -198,6 +220,11 @@ document.addEventListener('selectionchange', () => {
 });
 
 document.execCommand('defaultParagraphSeparator', false, 'p');
+
+const lagWordsSelect = document.getElementById('lagWords');
+lagWordsSelect.addEventListener('change', () => {
+  LAG_WORDS = parseInt(lagWordsSelect.value, 10) || 4;
+});
 
 const zoomSelect = document.getElementById('zoom');
 zoomSelect.addEventListener('change', () => {
