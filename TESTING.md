@@ -138,6 +138,34 @@ Widened to 22s (comfortably over the worst-case sequential chain through
 all 5 configured keys) so a correction is only ever lost if every key
 genuinely fails, never just because it took a while.
 
+### Rebrand + file save/load + functional menus (2026-09-05)
+
+This batch was UI/architecture, not correction-engine work, so it's not
+covered by `run_tests.py` — verified by hand instead: purple accent color
+throughout, the document icon and favicon both recolored and mirrored
+(folded corner now top-left), a real `docs/` folder-backed save/open/new/
+download flow (`Ctrl+S`, the File menu, and clicking the document icon all
+exercised end-to-end — a saved file was confirmed on disk, then reopened
+via the file browser with formatting intact, and Save As confirmed to
+create a second file rather than overwriting the first), and all 8
+menu-bar categories wired to real actions.
+
+Caught one real bug before it shipped: `.menu-dropdown` and `.modal-
+overlay` both set `display: flex` unconditionally, which has the *same*
+CSS specificity as the browser's built-in `[hidden] { display: none }`
+rule — and came later in the stylesheet, so it silently won, meaning
+every dropdown and the file-browser modal were visible on page load
+instead of hidden. Fixed with an explicit `.menu-dropdown[hidden] {
+display: none }` (and the same for `.modal-overlay`) to out-specificity
+the base rule. Worth remembering for any future `[hidden]`-toggled element
+that also carries its own `display` rule.
+
+Also re-ran the full correction-engine test suite after all this UI work
+to make sure none of it broke the core feature — all 6 cases still pass,
+latency back down to a healthy 2.5-2.9s across the board (the earlier
+outliers were rate-limit pressure from this session's own heavy testing,
+not a real regression — confirms that theory).
+
 ## Adding a new test case
 
 Add an entry to `tests/cases.json` with a unique `id`, the exact text,

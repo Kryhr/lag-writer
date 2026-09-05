@@ -7,13 +7,18 @@ Run: python server.py [port]
 """
 import json
 import os
+import re
 import sys
 import threading
+import time
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+DOCS_DIR = os.path.join(HERE, 'docs')
+os.makedirs(DOCS_DIR, exist_ok=True)
+DOC_ID_RE = re.compile(r'^[A-Za-z0-9_-]+$')
 
 SYSTEM_PROMPT = (
     "You are a background grammar, spelling, and punctuation correction engine "
@@ -149,6 +154,53 @@ def correct_sentence(text):
     return None, '; '.join(errors) or 'no API keys configured in .env'
 
 
+def doc_path(doc_id):
+    if not DOC_ID_RE.fullmatch(doc_id or ''):
+        return None
+    return os.path.join(DOCS_DIR, doc_id + '.json')
+
+
+def list_docs():
+    docs = []
+    for fname in os.listdir(DOCS_DIR):
+        if not fname.endswith('.json'):
+            continue
+        try:
+            with open(os.path.join(DOCS_DIR, fname), encoding='utf-8') as f:
+                d = json.load(f)
+            docs.append({
+                'id': d['id'],
+                'title': d.get('title') or 'Untitled document',
+                'updatedAt': d.get('updatedAt', ''),
+            })
+        except (OSError, json.JSONDecodeError, KeyError):
+            continue
+    docs.sort(key=lambda d: d['updatedAt'], reverse=True)
+    return docs
+
+
+def read_doc(doc_id):
+    path = doc_path(doc_id)
+    if not path or not os.path.isfile(path):
+        return None
+    with open(path, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def write_doc(doc_id, title, html, created_at=None):
+    now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    data = {
+        'id': doc_id,
+        'title': title or 'Untitled document',
+        'html': html or '',
+        'createdAt': created_at or now,
+        'updatedAt': now,
+    }
+    with open(doc_path(doc_id), 'w', encoding='utf-8') as f:
+        json.dump(data, f)
+    return data
+
+
 class Handler(BaseHTTPRequestHandler):
     def _static(self):
         path = self.path.split('?', 1)[0]
@@ -159,7 +211,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
-        types = {'.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css'}
+        types = {
+            '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+            '.svg': 'image/svg+xml',
+        }
         ctype = types.get(os.path.splitext(full)[1], 'application/octet-stream')
         with open(full, 'rb') as f:
             body = f.read()
@@ -170,27 +225,65 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        path = self.path.split('?', 1)[0]
+        if path == '/api/docs':
+            self._json(200, list_docs())
+            return
+        if path.startswith('/api/docs/'):
+            doc = read_doc(path[len('/api/docs/'):])
+            if doc is None:
+                self._json(404, {'error': 'not found'})
+            else:
+                self._json(200, doc)
+            return
         self._static()
 
+    def _read_json_body(self):
+        length = int(self.headers.get('Content-Length', 0))
+        try:
+            return json.loads(self.rfile.read(length) or b'{}')
+        except json.JSONDecodeError:
+            return {}
+
     def do_POST(self):
-        if self.path != '/api/correct':
+        if self.path == '/api/correct':
+            payload = self._read_json_body()
+            text = (payload.get('text') or '').strip()
+            if not text:
+                self._json(400, {'error': 'missing text'})
+                return
+            corrected, error = correct_sentence(text)
+            if corrected is None:
+                self._json(502, {'error': error})
+            else:
+                self._json(200, {'corrected': corrected})
+            return
+        if self.path == '/api/docs':
+            payload = self._read_json_body()
+            doc_id = f'doc_{int(time.time() * 1000)}'
+            data = write_doc(doc_id, payload.get('title'), payload.get('html'))
+            self._json(200, {'id': data['id'], 'updatedAt': data['updatedAt']})
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def do_PUT(self):
+        path = self.path.split('?', 1)[0]
+        if not path.startswith('/api/docs/'):
             self.send_response(404)
             self.end_headers()
             return
-        length = int(self.headers.get('Content-Length', 0))
-        try:
-            payload = json.loads(self.rfile.read(length) or b'{}')
-        except json.JSONDecodeError:
-            payload = {}
-        text = (payload.get('text') or '').strip()
-        if not text:
-            self._json(400, {'error': 'missing text'})
+        doc_id = path[len('/api/docs/'):]
+        if not DOC_ID_RE.fullmatch(doc_id):
+            self._json(400, {'error': 'invalid id'})
             return
-        corrected, error = correct_sentence(text)
-        if corrected is None:
-            self._json(502, {'error': error})
-        else:
-            self._json(200, {'corrected': corrected})
+        existing = read_doc(doc_id)
+        payload = self._read_json_body()
+        data = write_doc(
+            doc_id, payload.get('title'), payload.get('html'),
+            created_at=existing['createdAt'] if existing else None,
+        )
+        self._json(200, {'id': data['id'], 'updatedAt': data['updatedAt']})
 
     def _json(self, status, obj):
         body = json.dumps(obj).encode('utf-8')

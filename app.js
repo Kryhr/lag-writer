@@ -282,3 +282,175 @@ zoomSelect.addEventListener('change', () => {
 
 const titleInput = document.getElementById('docTitle');
 titleInput.addEventListener('focus', () => titleInput.select());
+
+// --- Menu dropdowns ---------------------------------------------------------
+
+function closeAllMenus() {
+  document.querySelectorAll('.menu-dropdown').forEach((p) => { p.hidden = true; });
+}
+document.querySelectorAll('.menu-label').forEach((label) => {
+  label.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const panel = document.querySelector(`[data-menu-panel="${label.dataset.menu}"]`);
+    const wasOpen = !panel.hidden;
+    closeAllMenus();
+    panel.hidden = wasOpen;
+  });
+});
+document.addEventListener('click', closeAllMenus);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeAllMenus();
+});
+// Buttons inside a dropdown also blur the page's selection like any other
+// toolbar button — same reasoning as the plain-button handler above.
+document.querySelectorAll('.menu-dropdown button').forEach((btn) => {
+  btn.addEventListener('mousedown', (e) => e.preventDefault());
+});
+
+// --- File save/load ----------------------------------------------------------
+
+let currentDocId = null;
+
+function saveDocument() {
+  const body = JSON.stringify({ title: titleInput.value, html: page.innerHTML });
+  const req = currentDocId
+    ? fetch(`/api/docs/${currentDocId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
+    : fetch('/api/docs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  req.then((r) => (r.ok ? r.json() : null)).then((data) => {
+    if (data) currentDocId = data.id;
+  });
+}
+
+function saveDocumentAs() {
+  currentDocId = null;
+  saveDocument();
+}
+
+function newDocument() {
+  if (!confirm('Discard the current document and start a new one?')) return;
+  page.innerHTML = '<p><br></p>';
+  titleInput.value = 'Untitled document';
+  currentDocId = null;
+}
+
+function renderFileList(docs) {
+  const list = document.getElementById('fileList');
+  list.innerHTML = '';
+  if (!docs.length) {
+    list.innerHTML = '<div class="file-list-empty">No saved documents yet.</div>';
+    return;
+  }
+  for (const doc of docs) {
+    const item = document.createElement('div');
+    item.className = 'file-list-item';
+    const when = doc.updatedAt ? new Date(doc.updatedAt).toLocaleString() : '';
+    item.innerHTML = `<span class="file-title"></span><span class="file-meta"></span>`;
+    item.querySelector('.file-title').textContent = doc.title;
+    item.querySelector('.file-meta').textContent = when;
+    item.addEventListener('click', () => openDocument(doc.id));
+    list.appendChild(item);
+  }
+}
+
+function openDocument(id) {
+  fetch(`/api/docs/${id}`).then((r) => (r.ok ? r.json() : null)).then((doc) => {
+    if (!doc) return;
+    page.innerHTML = doc.html || '<p><br></p>';
+    titleInput.value = doc.title || 'Untitled document';
+    currentDocId = doc.id;
+    document.getElementById('fileBrowserOverlay').hidden = true;
+  });
+}
+
+function openFileBrowser() {
+  fetch('/api/docs').then((r) => (r.ok ? r.json() : [])).then((docs) => {
+    renderFileList(docs || []);
+    document.getElementById('fileBrowserOverlay').hidden = false;
+  });
+}
+
+document.getElementById('docIconBtn').addEventListener('click', openFileBrowser);
+document.getElementById('closeFileBrowser').addEventListener('click', () => {
+  document.getElementById('fileBrowserOverlay').hidden = true;
+});
+document.getElementById('fileBrowserOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'fileBrowserOverlay') e.target.hidden = true;
+});
+
+function downloadDocument() {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${titleInput.value}</title></head><body>${page.innerHTML}</body></html>`;
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${titleInput.value || 'document'}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    saveDocument();
+  }
+});
+
+// --- Menu actions (File/Insert/Tools/Extensions/Help) ------------------------
+
+function insertLinkPrompt() {
+  const url = prompt('Link URL:');
+  if (url) cmd('createLink', url);
+}
+
+const imageFileInput = document.getElementById('imageFileInput');
+function insertImagePrompt() {
+  imageFileInput.click();
+}
+imageFileInput.addEventListener('change', () => {
+  const file = imageFileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    restoreSelection();
+    document.execCommand('insertImage', false, reader.result);
+  };
+  reader.readAsDataURL(file);
+  imageFileInput.value = '';
+});
+
+function showWordCount() {
+  const text = page.innerText.trim();
+  const words = text ? text.split(/\s+/).length : 0;
+  const chars = text.length;
+  alert(`Word count: ${words}\nCharacter count: ${chars}`);
+}
+
+function showAbout() {
+  alert('lag-writer\n\nA writing assistant that trails a few words behind you, silently fixing typos, grammar, and punctuation.\n\nhttps://github.com/Kryhr/lag-writer');
+}
+
+const MENU_ACTIONS = {
+  new: newDocument,
+  open: openFileBrowser,
+  save: saveDocument,
+  saveAs: saveDocumentAs,
+  download: downloadDocument,
+  insertLink: insertLinkPrompt,
+  insertImage: insertImagePrompt,
+  wordCount: showWordCount,
+  about: showAbout,
+  extensionsLink: () => window.open('https://github.com/Kryhr/lag-writer', '_blank'),
+};
+document.querySelectorAll('.menu-dropdown [data-action]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const fn = MENU_ACTIONS[btn.dataset.action];
+    if (fn) fn();
+  });
+});
+
+document.querySelectorAll('.menu-dropdown [data-zoom]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    zoomSelect.value = btn.dataset.zoom;
+    zoomSelect.dispatchEvent(new Event('change'));
+  });
+});

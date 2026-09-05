@@ -4,24 +4,100 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Untitled document</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <header class="topbar">
   <div class="topbar-row1">
-    <div class="doc-icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="36" height="36"><path fill="#4285f4" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path fill="#a5c4fa" d="M15 2v5h5z"/><path fill="#fff" d="M7 12h10v1.4H7zM7 15h10v1.4H7zM7 9h6v1.4H7z"/></svg>
-    </div>
+    <button id="docIconBtn" class="doc-icon" title="Your documents">
+      <svg viewBox="0 0 24 24" width="36" height="36"><g transform="translate(24,0) scale(-1,1)"><path fill="#7c3aed" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path fill="#c4b5fd" d="M15 2v5h5z"/><path fill="#fff" d="M7 12h10v1.4H7zM7 15h10v1.4H7zM7 9h6v1.4H7z"/></g></svg>
+    </button>
     <div class="doc-title-block">
       <input id="docTitle" class="doc-title" value="Untitled document" spellcheck="false">
-      <nav class="menubar" aria-hidden="true">
-        <span>File</span><span>Edit</span><span>View</span><span>Insert</span>
-        <span>Format</span><span>Tools</span><span>Extensions</span><span>Help</span>
+      <nav class="menubar">
+        <div class="menu-item">
+          <span class="menu-label" data-menu="file">File</span>
+          <div class="menu-dropdown" data-menu-panel="file" hidden>
+            <button data-action="new">New</button>
+            <button data-action="open">Open…</button>
+            <button data-action="save">Save</button>
+            <button data-action="saveAs">Save As…</button>
+            <button data-action="download">Download as .html</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="edit">Edit</span>
+          <div class="menu-dropdown" data-menu-panel="edit" hidden>
+            <button data-cmd="undo">Undo</button>
+            <button data-cmd="redo">Redo</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="view">View</span>
+          <div class="menu-dropdown" data-menu-panel="view" hidden>
+            <button data-zoom="0.75">Zoom: 75%</button>
+            <button data-zoom="1">Zoom: 100%</button>
+            <button data-zoom="1.25">Zoom: 125%</button>
+            <button data-zoom="1.5">Zoom: 150%</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="insert">Insert</span>
+          <div class="menu-dropdown" data-menu-panel="insert" hidden>
+            <button data-action="insertLink">Link…</button>
+            <button data-action="insertImage">Image…</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="format">Format</span>
+          <div class="menu-dropdown" data-menu-panel="format" hidden>
+            <button data-cmd="bold">Bold</button>
+            <button data-cmd="italic">Italic</button>
+            <button data-cmd="underline">Underline</button>
+            <button data-cmd="strikeThrough">Strikethrough</button>
+            <button data-cmd="justifyLeft">Align left</button>
+            <button data-cmd="justifyCenter">Align center</button>
+            <button data-cmd="justifyRight">Align right</button>
+            <button data-cmd="justifyFull">Justify</button>
+            <button data-cmd="removeFormat">Clear formatting</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="tools">Tools</span>
+          <div class="menu-dropdown" data-menu-panel="tools" hidden>
+            <button data-action="wordCount">Word count</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="extensions">Extensions</span>
+          <div class="menu-dropdown" data-menu-panel="extensions" hidden>
+            <button data-action="extensionsLink">View on GitHub</button>
+          </div>
+        </div>
+        <div class="menu-item">
+          <span class="menu-label" data-menu="help">Help</span>
+          <div class="menu-dropdown" data-menu-panel="help" hidden>
+            <button data-action="about">About lag-writer</button>
+          </div>
+        </div>
       </nav>
     </div>
   </div>
 </header>
+
+<div id="fileBrowserOverlay" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <span>Your documents</span>
+      <button id="closeFileBrowser" class="icon-btn">&times;</button>
+    </div>
+    <div id="fileList" class="file-list"></div>
+  </div>
+</div>
+
+<input id="imageFileInput" type="file" accept="image/*" hidden>
 
 <div class="toolbar">
   <button data-cmd="undo" title="Undo" class="icon-btn">&#8630;</button>

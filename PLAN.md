@@ -66,4 +66,13 @@ extensions, using free-tier Groq/Gemini API keys instead of a subscription.
       added a live toolbar control for the lag-word distance, native red
       spellcheck squiggly, and a blue "checking grammar" squiggly while a
       sentence is in flight to the LLM
+- [x] Phase 2.2 — dispatches the LLM pass on comma boundaries too (not just
+      sentence-ending punctuation), enforces correct capitalization for
+      mid-sentence fragments client-side, and widened the request timeout
+      so a slow-but-successful correction is never silently dropped
+- [x] Phase 2.3 — purple rebrand (was Google blue), favicon, real local
+      file save/open/new/download backed by a `docs/` folder next to
+      `server.py`, and functional dropdown menus for all 8 menu-bar
+      categories (Extensions links out to the GitHub repo — no real
+      extension system exists to plug into)
 - [ ] Phase 3 browser extension
