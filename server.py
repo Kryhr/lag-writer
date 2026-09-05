@@ -5,6 +5,7 @@ commit that file.
 
 Run: python server.py [port]
 """
+import concurrent.futures
 import json
 import os
 import re
@@ -136,21 +137,83 @@ def call_gemini(key, text):
         return data['candidates'][0]['content']['parts'][0]['text'].strip()
 
 
-def correct_sentence(text):
+# Shared, persistent pool — NOT created per-request. A per-request
+# `with ThreadPoolExecutor() as ex:` would block on __exit__ until every
+# submitted call finishes, including ones we no longer care about once a
+# faster key has already answered, defeating the whole point of racing them.
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+
+
+def _race(call_fn, keys, text, hedge_delay=1.5):
+    """Fires the first key; brings in the next one concurrently either as
+    soon as the current one FAILS, or — if it's just slow, not erroring —
+    once `hedge_delay` seconds pass without an answer (a "hedged request",
+    the same idea distributed systems use to bound tail latency without
+    doubling load on the common/fast path every time).
+
+    This started as "fire every key concurrently, always" — that cut
+    single-request latency nicely, but running the test suite back-to-back
+    immediately produced two 502s (all keys failing at once) that weren't
+    happening before: hitting every live key simultaneously on every single
+    request measurably increases how often they get rate-limited together.
+    Hedging keeps the common case down to one key's quota per request.
+
+    A real gap surfaced while testing THIS version too: a key that fails
+    FAST (like our one permanently-banned Gemini key, 403 in under a
+    second) would empty `pending` without ever trying the next key, since
+    the original loop only added a new key on a hedge *timeout*, not on a
+    *fast failure* — so a single dead-on-arrival key could make the whole
+    request fail in under a second even with working keys still available.
+    Fixed: whenever `pending` drains to empty and keys remain, launch the
+    next one immediately, not just when the hedge timer elapses.
+    """
+    if not keys:
+        return None, []
     errors = []
+    keys_iter = iter(keys)
+    pending = {}
+
+    def launch_next():
+        try:
+            k = next(keys_iter)
+        except StopIteration:
+            return False
+        pending[_executor.submit(call_fn, k, text)] = k
+        return True
+
+    if not launch_next():
+        return None, errors
+
+    while True:
+        # Exactly one attempt in flight: give it hedge_delay before adding
+        # another. Two or more in flight already (or no more keys to add):
+        # just wait for whichever finishes first, no further timeout.
+        timeout = hedge_delay if len(pending) == 1 else None
+        done, _ = concurrent.futures.wait(pending, timeout=timeout, return_when=concurrent.futures.FIRST_COMPLETED)
+        if not done:
+            launch_next()  # hedge timed out; bring in the next key (no-op if none left)
+            continue
+        for f in done:
+            del pending[f]
+            try:
+                return f.result(), errors
+            except Exception as e:  # noqa: BLE001 - want to see every key's failure
+                errors.append(str(e))
+        if not pending and not launch_next():
+            return None, errors
+
+
+def correct_sentence(text):
     # Gemini first: Groq's API rejected every key here with "Access denied,
     # check your network settings" — likely this network's egress, not the
     # keys themselves — so it's kept only as a fallback in case that clears.
-    for key in ordered_keys('GEMINI_API_KEY'):
-        try:
-            return call_gemini(key, text), None
-        except Exception as e:  # noqa: BLE001 - want to try every key/provider
-            errors.append(f'gemini: {e}')
-    for key in ordered_keys('GROQ_API_KEY'):
-        try:
-            return call_groq(key, text), None
-        except Exception as e:  # noqa: BLE001
-            errors.append(f'groq: {e}')
+    result, gemini_errors = _race(call_gemini, ordered_keys('GEMINI_API_KEY'), text)
+    if result is not None:
+        return result, None
+    result, groq_errors = _race(call_groq, ordered_keys('GROQ_API_KEY'), text)
+    if result is not None:
+        return result, None
+    errors = [f'gemini: {e}' for e in gemini_errors] + [f'groq: {e}' for e in groq_errors]
     return None, '; '.join(errors) or 'no API keys configured in .env'
 
 

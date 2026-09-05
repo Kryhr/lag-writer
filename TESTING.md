@@ -166,6 +166,54 @@ latency back down to a healthy 2.5-2.9s across the board (the earlier
 outliers were rate-limit pressure from this session's own heavy testing,
 not a real regression — confirms that theory).
 
+### Key exhaustion + hedged requests (2026-09-05)
+
+User dogfooding reported a real, complete failure: a two-sentence
+paragraph with an obvious typo ("jsut") came back completely unchanged
+after 10-15 seconds. Investigating each configured key individually found
+the root cause: **`GEMINI_API_KEY_3` is now permanently banned** — `403,
+"Your project has been denied access. Please contact support."` — almost
+certainly triggered by this session's own very heavy automated testing
+today (hundreds of rapid calls in a short window looks like abuse to
+Google's systems). Both Groq keys remain network-blocked as before. That
+leaves only 2 working keys out of 5 configured.
+
+`correct_sentence()`'s original design tried keys strictly one at a time,
+in order. If round-robin ever put the dead key first, that was fine (it
+fails in ~0.2s) — but if a *live* key happened to be slow that request
+(the same free-tier soft-throttling documented earlier), the whole
+request waited through that key's full timeout before ever trying the
+one that would have worked. That's what produced the 10-15s failures.
+
+First attempt at a fix — fire every configured key concurrently on every
+request, take the first success — cut single-request latency nicely (5
+consecutive calls all under 1.4s) but running the test suite back-to-back
+immediately produced two 502s that weren't happening before: hitting both
+live keys simultaneously on *every* request measurably increases how often
+they get rate-limited together, which is the opposite of what we want
+given we've already lost one key that way today.
+
+Replaced with a **hedged request** instead: fire one key; only bring in
+the next one concurrently once 1.5s passes with no answer, or the moment
+the current one fails outright (a second bug caught while testing this:
+the first version only hedged on a *timeout*, not a *fast failure*, so
+the dead key's near-instant 403 could empty the pending set and fail the
+whole request in under a second even with working keys available —
+fixed to launch the next key immediately whenever nothing is left in
+flight and keys remain). This keeps the common case down to one key's
+quota per request while still bounding the worst case.
+
+Honest result: real, measurable improvement in the common case, but
+during this same investigation both remaining live keys started showing
+outright 503s and a hard 5s timeout — evidence we (between real usage and
+this investigation's own testing) have likely pushed today's free-tier
+quota close to its limit. No amount of client-side retry logic can fix an
+actually-exhausted quota. Worth remembering this specific ceiling exists
+and treating persistent failures *on a single day of heavy use* as
+possible quota exhaustion, not automatically a new code regression —
+check by testing a key directly against the provider's API before
+assuming the bug is in `server.py`.
+
 ## Adding a new test case
 
 Add an entry to `tests/cases.json` with a unique `id`, the exact text,
