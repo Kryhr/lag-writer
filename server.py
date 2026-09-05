@@ -8,6 +8,7 @@ Run: python server.py [port]
 import json
 import os
 import sys
+import threading
 import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -48,6 +49,15 @@ def load_env():
 
 ENV = load_env()
 
+# Free-tier APIs soft-throttle a single key under rapid repeated use (no hard
+# 429, just steadily increasing latency — confirmed by timing repeated calls
+# directly against Gemini, no proxy involved: 0.8s, then 4.1s, then 3.3s on
+# the same key back to back). With multiple keys configured, round-robin
+# which one gets tried first each call so back-to-back sentences (a normal
+# typing pattern) spread load instead of hammering one key into throttling.
+_rr_lock = threading.Lock()
+_rr_counters = {}
+
 
 def ordered_keys(prefix):
     keys = []
@@ -57,9 +67,18 @@ def ordered_keys(prefix):
     while ENV.get(f'{prefix}_{i}'):
         keys.append(ENV[f'{prefix}_{i}'])
         i += 1
-    return keys
+    if len(keys) <= 1:
+        return keys
+    with _rr_lock:
+        start = _rr_counters.get(prefix, 0)
+        _rr_counters[prefix] = (start + 1) % len(keys)
+    return keys[start:] + keys[:start]
 
 
+# 6s per key/provider: gemini-3.5-flash-lite normally answers in well under
+# 2s, so this is generous headroom for one call while still keeping the
+# worst case (every configured key hanging) bounded — with 15s per key we
+# once saw a request pile up past 20s total trying multiple keys in a row.
 def call_groq(key, text):
     req = urllib.request.Request(
         'https://api.groq.com/openai/v1/chat/completions',
@@ -76,7 +95,7 @@ def call_groq(key, text):
             'Content-Type': 'application/json',
         },
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=6) as resp:
         data = json.loads(resp.read().decode('utf-8'))
         return data['choices'][0]['message']['content'].strip()
 
@@ -85,11 +104,13 @@ def call_gemini(key, text):
     req = urllib.request.Request(
         f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={key}',
         data=json.dumps({
-            'contents': [{'parts': [{'text': f'{SYSTEM_PROMPT}\n\nSentence: {text}'}]}],
+            'systemInstruction': {'parts': [{'text': SYSTEM_PROMPT}]},
+            'contents': [{'parts': [{'text': text}]}],
+            'generationConfig': {'temperature': 0},
         }).encode('utf-8'),
         headers={'Content-Type': 'application/json'},
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
+    with urllib.request.urlopen(req, timeout=6) as resp:
         data = json.loads(resp.read().decode('utf-8'))
         return data['candidates'][0]['content']['parts'][0]['text'].strip()
 

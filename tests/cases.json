@@ -1,0 +1,37 @@
+[
+  {
+    "id": "grammar-basic-1",
+    "text": "me and him dont went to the store yesterday because we was hungry.",
+    "tags": ["grammar", "pronoun-case", "subject-verb-agreement", "tense", "contraction"],
+    "addedDate": "2026-09-04",
+    "note": "The original stress-test sentence for the LLM pass — pronoun case (me and him -> he and I), subject-verb agreement (we was -> we were), tense (dont went -> didn't go), plus a dictionary-level contraction fix (dont -> don't)."
+  },
+  {
+    "id": "quote-insertion-1",
+    "text": "she said i will be there but never showed up",
+    "tags": ["punctuation", "quotes", "comma", "capitalization"],
+    "addedDate": "2026-09-04",
+    "note": "Tests whether the model adds punctuation that was 'obviously' missing rather than just fixing words: a missing pair of quotation marks around reported speech, plus a comma before the contrasting clause."
+  },
+  {
+    "id": "run-on-1",
+    "text": "i went to the store its a nice day out there dog was happy",
+    "tags": ["run-on-sentence", "theyre-their-there", "its-vs-its"],
+    "addedDate": "2026-09-04",
+    "note": "No punctuation at all, three independent clauses run together, plus a there/their mix-up. Good test of whether the model over-corrects into a single comma-spliced sentence vs. properly splitting it."
+  },
+  {
+    "id": "abbrev-1",
+    "text": "im not sure what i should work on building next. i think that i def need to work on building the algos out more and make them more advanced.",
+    "tags": ["abbreviation", "contraction", "capitalization", "user-reported"],
+    "addedDate": "2026-09-05",
+    "note": "The user's own real dogfooding input, verbatim. Exercises im -> I'm, def -> definitely, and sentence-start capitalization across two sentences in one pass."
+  },
+  {
+    "id": "possessive-safety-1",
+    "text": "the dog wagged its tail happily.",
+    "tags": ["possessive-safety", "no-false-positive", "regression-guard"],
+    "addedDate": "2026-09-04",
+    "note": "Guards against a real bug we shipped and caught once already: blindly forcing its -> it's broke correct possessive usage. This sentence is already grammatically correct and MUST come back unchanged (or only re-punctuated), never rewritten."
+  }
+]

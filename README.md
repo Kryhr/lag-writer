@@ -40,3 +40,13 @@ pronoun case, tense, etc.) — same no-visible-log behavior as Phase 1.
 
 If no keys are configured, or both providers fail, the editor just falls
 back to the Phase 1 local-only behavior.
+
+## Testing
+
+See [TESTING.md](TESTING.md) for the test-case log and what each one has
+revealed so far. Quick version:
+
+```
+python server.py            # in one terminal
+python tests/run_tests.py   # in another
+```
