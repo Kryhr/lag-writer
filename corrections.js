@@ -74,7 +74,17 @@ export const TYPOS = {
   unfortunatly: "unfortunately", wether: "whether", yeild: "yield",
 };
 
-export const STANDALONE = { i: 'I' };
+// Acronyms that are unambiguous typed lowercase (none of these have a real
+// standalone lowercase-word meaning in English, unlike e.g. "id" — which
+// stays mapped to "I'd" in CONTRACTIONS above rather than "ID", since that
+// one genuinely is ambiguous).
+export const STANDALONE = {
+  i: 'I', ai: 'AI', api: 'API', cpu: 'CPU', gpu: 'GPU', url: 'URL',
+  faq: 'FAQ', diy: 'DIY', ceo: 'CEO', cfo: 'CFO', cto: 'CTO',
+  usa: 'USA', uk: 'UK', eu: 'EU', nasa: 'NASA', fbi: 'FBI', cia: 'CIA',
+  dna: 'DNA', rgb: 'RGB', html: 'HTML', css: 'CSS', sql: 'SQL',
+  ui: 'UI', ux: 'UX', pdf: 'PDF', gps: 'GPS',
+};
 
 const ALL_RULES = { ...TYPOS, ...CONTRACTIONS, ...SHORTHAND, ...STANDALONE };
 
