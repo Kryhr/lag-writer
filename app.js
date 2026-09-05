@@ -213,9 +213,24 @@ function updateToolbarState() {
     btn.classList.toggle('active', document.queryCommandState(c));
   }
 }
+// selectionchange fires on every caret move — i.e. on every keystroke while
+// typing, not just on deliberate selections. updateToolbarState() runs 8
+// synchronous (and slow — queryCommandState is a known-heavy legacy API)
+// checks, so calling it straight from the event handler made fast typing
+// visibly worse the faster it got: each keystroke had to wait for the
+// previous one's 8 checks to finish. Coalesce to at most once per frame.
+let toolbarStateQueued = false;
+function scheduleToolbarStateUpdate() {
+  if (toolbarStateQueued) return;
+  toolbarStateQueued = true;
+  requestAnimationFrame(() => {
+    toolbarStateQueued = false;
+    updateToolbarState();
+  });
+}
 document.addEventListener('selectionchange', () => {
   if (document.activeElement === page || page.contains(document.activeElement)) {
-    updateToolbarState();
+    scheduleToolbarStateUpdate();
   }
 });
 

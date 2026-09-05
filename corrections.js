@@ -37,6 +37,14 @@ export const SHORTHAND = {
   ppl: "people", u: "you", ur: "your", r: "are", pls: "please", plz: "please",
   thx: "thanks", ty: "thank you", np: "no problem", omg: "oh my god",
   brb: "be right back", jk: "just kidding", tbf: "to be fair",
+  def: "definitely", prob: "probably", probs: "probably",
+  obv: "obviously", obvi: "obviously", rly: "really", srsly: "seriously",
+  atm: "at the moment", hbu: "how about you", wbu: "what about you",
+  lol: "laughing out loud", lmao: "laughing my ass off", rofl: "rolling on the floor laughing",
+  b4: "before", gr8: "great", l8r: "later",
+  coulda: "could have", shoulda: "should have", woulda: "would have",
+  musta: "must have", outta: "out of", gimme: "give me", lemme: "let me",
+  lotta: "a lot of",
 };
 
 export const TYPOS = {
