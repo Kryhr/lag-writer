@@ -1,5 +1,8 @@
 import { correctWord, isSentenceStart, justCompletedSentence } from './corrections.js';
-import { buildDocModel, getCaretGlobalOffset, setCaretGlobalOffset, replaceGlobalRange } from './domtext.js';
+import {
+  buildDocModel, getCaretGlobalOffset, setCaretGlobalOffset,
+  replaceGlobalRange, snapshotRange, applySnapshotReplacement,
+} from './domtext.js';
 
 const page = document.getElementById('page');
 
@@ -8,6 +11,48 @@ const page = document.getElementById('page');
 const LAG_WORDS = 4;
 
 let correctedUpTo = 0; // word index already scanned, so we don't re-touch active edits
+let smartCheckedUpTo = 0; // char offset up through which sentences were already sent to the LLM
+
+// Finds every complete sentence in [fromOffset, caret) that hasn't been
+// scanned yet — plural, because fast typing can let more than one sentence
+// finish between two debounced passes, and each one still needs its own
+// trip to the LLM rather than only the most recently completed one.
+function findNewSentences(text, caret, fromOffset) {
+  const sentences = [];
+  let start = fromOffset;
+  while (start < caret && /\s/.test(text[start])) start++;
+  for (let i = start; i < caret; i++) {
+    if (/[.!?]/.test(text[i])) {
+      const end = i + 1;
+      if (end > start) sentences.push({ start, end });
+      start = end;
+      while (start < caret && /\s/.test(text[start])) start++;
+    }
+  }
+  return sentences;
+}
+
+function requestSmartCorrection(blockInfos, start, end) {
+  const snap = snapshotRange(blockInfos, start, end);
+  if (!snap || !snap.text.trim()) return;
+  fetch('/api/correct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: snap.text }),
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      if (!data || !data.corrected || data.corrected === snap.text) return;
+      if (applySnapshotReplacement(snap, data.corrected)) {
+        // Offsets past this point may now be off (the replacement can be a
+        // different length); a full harmless rescan next keystroke is cheap
+        // since both correction passes are idempotent.
+        correctedUpTo = 0;
+        smartCheckedUpTo = 0;
+      }
+    })
+    .catch(() => {}); // offline/rate-limited/etc — local-rules pass already ran
+}
 
 function process() {
   const { text, blockInfos } = buildDocModel(page);
@@ -30,17 +75,27 @@ function process() {
   }
   correctedUpTo = safeWordCount;
 
-  if (!edits.length) return;
+  let finalBlockInfos = blockInfos;
+  let finalCaret = caret;
 
-  edits.sort((a, b) => b.start - a.start); // descending, so earlier offsets stay valid
-  let caretDelta = 0;
-  for (const edit of edits) {
-    const delta = replaceGlobalRange(blockInfos, edit.start, edit.end, edit.fixed);
-    if (edit.start < caret) caretDelta += delta;
+  if (edits.length) {
+    edits.sort((a, b) => b.start - a.start); // descending, so earlier offsets stay valid
+    let caretDelta = 0;
+    for (const edit of edits) {
+      const delta = replaceGlobalRange(blockInfos, edit.start, edit.end, edit.fixed);
+      if (edit.start < caret) caretDelta += delta;
+    }
+    const fresh = buildDocModel(page);
+    finalBlockInfos = fresh.blockInfos;
+    finalCaret = caret + caretDelta;
+    setCaretGlobalOffset(page, finalBlockInfos, finalCaret);
   }
 
-  const fresh = buildDocModel(page);
-  setCaretGlobalOffset(page, fresh.blockInfos, caret + caretDelta);
+  if (smartCheckedUpTo > finalCaret) smartCheckedUpTo = 0; // e.g. user deleted text
+  const fresh = edits.length ? buildDocModel(page) : { text, blockInfos: finalBlockInfos };
+  const newSentences = findNewSentences(fresh.text, finalCaret, smartCheckedUpTo);
+  for (const s of newSentences) requestSmartCorrection(fresh.blockInfos, s.start, s.end);
+  if (newSentences.length) smartCheckedUpTo = newSentences[newSentences.length - 1].end;
 }
 
 let debounceHandle = null;

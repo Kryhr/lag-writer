@@ -10,13 +10,20 @@ export const CONTRACTIONS = {
   didnt: "didn't", doesnt: "doesn't", im: "I'm", ive: "I've", ill: "I'll",
   id: "I'd", youre: "you're", youve: "you've", youll: "you'll", youd: "you'd",
   theyre: "they're", theyve: "they've", theyll: "they'll", theyd: "they'd",
-  were: "we're", weve: "we've", well: "we'll", wed: "we'd",
-  hes: "he's", shes: "she's", its: "it's", thats: "that's", whats: "what's",
-  lets: "let's", whos: "who's", theres: "there's", heres: "here's",
-  wheres: "where's", whens: "when's", cannot: "cannot", mustnt: "mustn't",
+  weve: "we've",
+  hes: "he's", shes: "she's", thats: "that's", whats: "what's",
+  whos: "who's", theres: "there's", heres: "here's",
+  wheres: "where's", whens: "when's", mustnt: "mustn't",
   neednt: "needn't", shant: "shan't", aint: "ain't", yall: "y'all",
-  ma: "ma'am", oclock: "o'clock",
+  oclock: "o'clock",
 };
+
+// Deliberately NOT in the table above, even though each is a common
+// missing-apostrophe typo: "its"/"were"/"well"/"wed"/"lets"/"ma" are also
+// valid standalone words (possessive "its", past-tense "were", "well" as in
+// a well of water, "to wed", the verb "lets", "ma" as in mother), so a blind
+// dictionary swap would silently break correct sentences. That nuance is
+// exactly what the sentence-level LLM pass (see app.js) is for instead.
 
 export const SHORTHAND = {
   tbh: "to be honest", lmk: "let me know", idk: "I don't know",

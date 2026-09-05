@@ -4,7 +4,7 @@
     {
       "name": "lag-writer",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8756"],
+      "runtimeArgs": ["server.py", "8756"],
       "port": 8756
     }
   ]

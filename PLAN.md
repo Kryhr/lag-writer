@@ -57,5 +57,7 @@ extensions, using free-tier Groq/Gemini API keys instead of a subscription.
 - [x] Phase 1 local-rules demo, rebuilt as a full Docs-style rich text editor
       (toolbar formatting, silent background corrections, sentence-boundary
       trigger, auto-capitalization)
-- [ ] Phase 2 LLM smart pass
+- [x] Phase 2 LLM smart pass — server.py proxies each completed sentence to
+      Groq/Gemini (server-side only, key never reaches the browser) and
+      silently patches in real grammar fixes the local dictionary can't catch
 - [ ] Phase 3 browser extension

@@ -150,3 +150,55 @@ export function replaceGlobalRange(blockInfos, start, end, replacement) {
   range.insertNode(document.createTextNode(replacement));
   return replacement.length - (end - start);
 }
+
+// Captures a range as live DOM node/offset handles (not global char offsets),
+// so it can be safely re-applied later — after an async round trip during
+// which unrelated edits elsewhere may have shifted every offset in the doc.
+export function snapshotRange(blockInfos, start, end) {
+  const bi = blockInfos.find((b) => start >= b.start && end <= b.end);
+  if (!bi) return null;
+  const startPos = findNodeAtOffset(bi.nodeArray, start - bi.start);
+  const endPos = findNodeAtOffset(bi.nodeArray, end - bi.start);
+  if (!startPos || !endPos) return null;
+  const range = document.createRange();
+  range.setStart(startPos.node, startPos.offset);
+  range.setEnd(endPos.node, endPos.offset);
+  return {
+    startNode: startPos.node, startOffset: startPos.offset,
+    endNode: endPos.node, endOffset: endPos.offset,
+    text: range.toString(),
+  };
+}
+
+// Re-applies a snapshot taken by snapshotRange. Refuses to touch anything if
+// the live text there no longer matches what was captured (the user edited
+// that spot in the meantime) or the nodes are no longer in the document.
+export function applySnapshotReplacement(snapshot, replacement) {
+  let range;
+  try {
+    range = document.createRange();
+    range.setStart(snapshot.startNode, snapshot.startOffset);
+    range.setEnd(snapshot.endNode, snapshot.endOffset);
+  } catch {
+    return false;
+  }
+  if (range.toString() !== snapshot.text) return false;
+
+  const sel = window.getSelection();
+  const cur = sel.rangeCount ? sel.getRangeAt(0) : null;
+  const caretWasAtEnd = !!cur && cur.collapsed &&
+    cur.startContainer === snapshot.endNode && cur.startOffset === snapshot.endOffset;
+
+  range.deleteContents();
+  const node = document.createTextNode(replacement);
+  range.insertNode(node);
+
+  if (caretWasAtEnd) {
+    const after = document.createRange();
+    after.setStart(node, node.length);
+    after.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(after);
+  }
+  return true;
+}

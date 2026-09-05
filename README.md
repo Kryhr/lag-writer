@@ -16,16 +16,27 @@ whenever you finish a sentence with `.`/`!`/`?`, the correction engine
 silently fixes typos, missing apostrophes, and shorthand (tbh, lmk, u, idk...)
 and capitalizes "I" and sentence starts — no network calls, no API key.
 
-Since it's plain ES modules, it needs to be served over HTTP rather than
-opened as a `file://` URL — e.g. `python -m http.server` in this folder,
-then visit `http://localhost:<port>/`.
+## Phase 2 (current): smarter grammar fixes via a free LLM
 
-## Phase 2: smarter corrections via a free LLM
+Copy `.env.example` to `.env` and fill in a free
+[Groq](https://console.groq.com/keys) and/or
+[Gemini](https://aistudio.google.com/apikey) key (`.env` is gitignored —
+never commit it). Multiple keys per provider are supported: `GROQ_API_KEY`,
+`GROQ_API_KEY_2`, `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, etc.
 
-Optional — paste a free [Groq](https://console.groq.com/keys) or
-[Gemini](https://aistudio.google.com/apikey) API key into the in-page settings
-panel. It's stored only in your browser's `localStorage`, never committed to
-this repo, and calls go straight from your browser to the provider.
+Then run:
 
-If you want a `.env` for local scripting/testing instead, copy
-`.env.example` to `.env` and fill in your key — `.env` is gitignored.
+```
+python server.py
+```
+
+and open `http://localhost:8756/`. This is a tiny local proxy — it serves
+the static site *and* relays each completed sentence to the LLM server-side,
+so the API key never reaches the browser (never expose it in client-side
+JS in a public repo). The local dictionary pass (Phase 1) still runs first
+and instantly; a moment later, the LLM pass silently fixes real grammar
+errors the dictionary can't catch (subject-verb agreement, wrong
+pronoun case, tense, etc.) — same no-visible-log behavior as Phase 1.
+
+If no keys are configured, or both providers fail, the editor just falls
+back to the Phase 1 local-only behavior.
