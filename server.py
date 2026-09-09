@@ -94,19 +94,24 @@ def ordered_keys(prefix):
     return keys[start:] + keys[:start]
 
 
-# 5s per key/provider: gemini-3.5-flash-lite normally answers in well under
-# 2s, so this is still generous headroom for one call. Kept short
-# deliberately because correct_sentence() can fall through several keys
-# sequentially (we have 3 Gemini + 2 Groq configured) — comma-boundary
-# checks mean several requests can land in the same instant (fast typing,
-# or a paste), so a real request has genuinely needed 2-3 key attempts
-# before succeeding. The client's own abort timeout (app.js) is sized to
-# tolerate the worst case of every key here timing out in sequence.
-def call_groq(key, text):
+# 5s per key/provider: fast models normally answer in well under 2s, so
+# this is still generous headroom for one call. Kept short deliberately
+# because correct_sentence() can fall through several providers/keys
+# sequentially — comma-boundary checks mean several requests can land in
+# the same instant (fast typing, or a paste), so a real request has
+# genuinely needed 2-3 attempts before succeeding. The client's own abort
+# timeout (app.js) is sized to tolerate the worst case of every configured
+# key timing out in sequence.
+def call_openai_compatible(base_url, model, key, text):
+    """Most LLM providers (Groq, Cerebras, OpenRouter, Together, Fireworks,
+    DeepInfra, Mistral, Cohere, GitHub Models, Novita, Hyperbolic, SambaNova,
+    and many more) expose the same OpenAI-style /chat/completions shape, so
+    one function covers all of them — adding a provider is a PROVIDERS
+    entry (base_url + model + env var name), not new Python."""
     req = urllib.request.Request(
-        'https://api.groq.com/openai/v1/chat/completions',
+        base_url,
         data=json.dumps({
-            'model': 'llama-3.3-70b-versatile',
+            'model': model,
             'temperature': 0,
             'messages': [
                 {'role': 'system', 'content': SYSTEM_PROMPT},
@@ -123,30 +128,12 @@ def call_groq(key, text):
         return data['choices'][0]['message']['content'].strip()
 
 
-def call_cerebras(key, text):
+def call_gemini(base_url, model, key, text):
+    """Gemini's request/response shape doesn't match the OpenAI standard
+    (systemInstruction + contents + generationConfig, not messages), so it
+    gets its own function — everything else uses call_openai_compatible."""
     req = urllib.request.Request(
-        'https://api.cerebras.ai/v1/chat/completions',
-        data=json.dumps({
-            'model': 'qwen-3.8-27b',
-            'temperature': 0,
-            'messages': [
-                {'role': 'system', 'content': SYSTEM_PROMPT},
-                {'role': 'user', 'content': text},
-            ],
-        }).encode('utf-8'),
-        headers={
-            'Authorization': f'Bearer {key}',
-            'Content-Type': 'application/json',
-        },
-    )
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        data = json.loads(resp.read().decode('utf-8'))
-        return data['choices'][0]['message']['content'].strip()
-
-
-def call_gemini(key, text):
-    req = urllib.request.Request(
-        f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={key}',
+        f'{base_url}/{model}:generateContent?key={key}',
         data=json.dumps({
             'systemInstruction': {'parts': [{'text': SYSTEM_PROMPT}]},
             'contents': [{'parts': [{'text': text}]}],
@@ -157,6 +144,52 @@ def call_gemini(key, text):
     with urllib.request.urlopen(req, timeout=5) as resp:
         data = json.loads(resp.read().decode('utf-8'))
         return data['candidates'][0]['content']['parts'][0]['text'].strip()
+
+
+# Every provider we're willing to try, in priority order. Adding a new one
+# is just another entry here (plus its key(s) in .env) — no new function
+# needed unless its API shape isn't OpenAI-compatible (only Gemini so far
+# needs its own). A provider with no key configured in .env costs nothing
+# at runtime: ordered_keys() returns [] for it and _race() skips straight
+# past. Model IDs are current as of when each was added — free-tier model
+# names/endpoints do drift, so if a provider starts erroring, check its
+# docs for the current free-tier model id rather than assuming it's dead.
+PROVIDERS = [
+    {'name': 'cerebras', 'kind': 'openai', 'env': 'CEREBRAS_API_KEY',
+     'base_url': 'https://api.cerebras.ai/v1/chat/completions', 'model': 'qwen-3.8-27b'},
+    {'name': 'groq', 'kind': 'openai', 'env': 'GROQ_API_KEY',
+     'base_url': 'https://api.groq.com/openai/v1/chat/completions', 'model': 'llama-3.3-70b-versatile'},
+    {'name': 'gemini', 'kind': 'gemini', 'env': 'GEMINI_API_KEY',
+     'base_url': 'https://generativelanguage.googleapis.com/v1beta/models', 'model': 'gemini-3.5-flash-lite'},
+    # Configured but no keys yet — add a key in .env under the matching
+    # env var and it starts getting tried automatically, no code change.
+    {'name': 'openrouter', 'kind': 'openai', 'env': 'OPENROUTER_API_KEY',
+     'base_url': 'https://openrouter.ai/api/v1/chat/completions', 'model': 'meta-llama/llama-3.1-8b-instruct:free'},
+    {'name': 'together', 'kind': 'openai', 'env': 'TOGETHER_API_KEY',
+     'base_url': 'https://api.together.xyz/v1/chat/completions', 'model': 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free'},
+    {'name': 'mistral', 'kind': 'openai', 'env': 'MISTRAL_API_KEY',
+     'base_url': 'https://api.mistral.ai/v1/chat/completions', 'model': 'mistral-small-latest'},
+    {'name': 'fireworks', 'kind': 'openai', 'env': 'FIREWORKS_API_KEY',
+     'base_url': 'https://api.fireworks.ai/inference/v1/chat/completions', 'model': 'accounts/fireworks/models/llama-v3p1-8b-instruct'},
+    {'name': 'deepinfra', 'kind': 'openai', 'env': 'DEEPINFRA_API_KEY',
+     'base_url': 'https://api.deepinfra.com/v1/openai/chat/completions', 'model': 'meta-llama/Meta-Llama-3.1-8B-Instruct'},
+    {'name': 'cohere', 'kind': 'openai', 'env': 'COHERE_API_KEY',
+     'base_url': 'https://api.cohere.ai/compatibility/v1/chat/completions', 'model': 'command-r7b-12-2024'},
+    {'name': 'github', 'kind': 'openai', 'env': 'GITHUB_API_KEY',
+     'base_url': 'https://models.github.ai/inference/chat/completions', 'model': 'openai/gpt-4o-mini'},
+    {'name': 'novita', 'kind': 'openai', 'env': 'NOVITA_API_KEY',
+     'base_url': 'https://api.novita.ai/v3/openai/chat/completions', 'model': 'meta-llama/llama-3.1-8b-instruct'},
+    {'name': 'hyperbolic', 'kind': 'openai', 'env': 'HYPERBOLIC_API_KEY',
+     'base_url': 'https://api.hyperbolic.xyz/v1/chat/completions', 'model': 'meta-llama/Llama-3.3-70B-Instruct'},
+    {'name': 'sambanova', 'kind': 'openai', 'env': 'SAMBANOVA_API_KEY',
+     'base_url': 'https://api.sambanova.ai/v1/chat/completions', 'model': 'Meta-Llama-3.1-8B-Instruct'},
+]
+
+
+def call_provider(provider, key, text):
+    if provider['kind'] == 'gemini':
+        return call_gemini(provider['base_url'], provider['model'], key, text)
+    return call_openai_compatible(provider['base_url'], provider['model'], key, text)
 
 
 # Shared, persistent pool — NOT created per-request. A per-request
@@ -226,28 +259,21 @@ def _race(call_fn, keys, text, hedge_delay=1.5):
 
 
 def correct_sentence(text):
-    # Cerebras first: a separate, fresh, much larger free-tier quota
-    # (1M tokens/day) from an entirely different account than the Gemini
-    # keys we'd been hammering all day — spreads load across independent
-    # limits instead of stacking more keys against the same one. Gemini
-    # is the fallback, Groq last (its API has rejected every key here with
-    # "Access denied, check your network settings" — likely this network's
-    # egress, not the keys themselves — so it's kept only in case that clears).
-    result, cerebras_errors = _race(call_cerebras, ordered_keys('CEREBRAS_API_KEY'), text)
-    if result is not None:
-        return result, None
-    result, gemini_errors = _race(call_gemini, ordered_keys('GEMINI_API_KEY'), text)
-    if result is not None:
-        return result, None
-    result, groq_errors = _race(call_groq, ordered_keys('GROQ_API_KEY'), text)
-    if result is not None:
-        return result, None
-    errors = (
-        [f'cerebras: {e}' for e in cerebras_errors]
-        + [f'gemini: {e}' for e in gemini_errors]
-        + [f'groq: {e}' for e in groq_errors]
-    )
-    return None, '; '.join(errors) or 'no API keys configured in .env'
+    # Walk PROVIDERS in order; a provider with no key configured costs
+    # nothing (ordered_keys returns [] and _race short-circuits). Groq in
+    # particular has rejected every key here with "Access denied, check
+    # your network settings" — likely this network's egress, not the keys
+    # themselves — kept in the list only in case that clears on some network.
+    all_errors = []
+    for provider in PROVIDERS:
+        keys = ordered_keys(provider['env'])
+        if not keys:
+            continue
+        result, errors = _race(lambda k, t, p=provider: call_provider(p, k, t), keys, text)
+        if result is not None:
+            return result, None
+        all_errors.extend(f"{provider['name']}: {e}" for e in errors)
+    return None, '; '.join(all_errors) or 'no API keys configured in .env'
 
 
 def doc_path(doc_id):
@@ -395,9 +421,8 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8756
-    cerebras_n = len(ordered_keys('CEREBRAS_API_KEY'))
-    groq_n = len(ordered_keys('GROQ_API_KEY'))
-    gemini_n = len(ordered_keys('GEMINI_API_KEY'))
-    print(f'lag-writer serving on http://localhost:{port}  '
-          f'(cerebras keys: {cerebras_n}, groq keys: {groq_n}, gemini keys: {gemini_n})')
+    configured = [(p['name'], len(ordered_keys(p['env']))) for p in PROVIDERS]
+    active = [f'{name}:{n}' for name, n in configured if n]
+    summary = ', '.join(active) if active else 'NONE — set at least one key in .env'
+    print(f'lag-writer serving on http://localhost:{port}  (providers: {summary})')
     ThreadingHTTPServer(('localhost', port), Handler).serve_forever()
