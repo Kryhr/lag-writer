@@ -306,6 +306,39 @@ def _race(call_fn, keys, text, hedge_delay=1.5):
             return None, errors
 
 
+# A provider that's actually dead (banned, unpaid, out of quota — not just
+# occasionally slow) gets retried on literally every single request
+# otherwise, which is a small but real latency tax paid forever until
+# someone notices and removes its key. This is a minimal circuit breaker:
+# after CIRCUIT_FAIL_THRESHOLD consecutive failures, skip that provider
+# entirely for CIRCUIT_COOLDOWN_S seconds rather than trying (and failing)
+# it again — then automatically give it another chance, no restart needed,
+# so a provider that gets fixed (billing sorted out, quota reset) recovers
+# on its own without any code change.
+CIRCUIT_FAIL_THRESHOLD = 3
+CIRCUIT_COOLDOWN_S = 60
+_circuit_lock = threading.Lock()
+_circuit_state = {}  # provider name -> {'fails': int, 'skip_until': float}
+
+
+def _circuit_should_skip(name):
+    with _circuit_lock:
+        st = _circuit_state.get(name)
+        return bool(st and time.time() < st['skip_until'])
+
+
+def _circuit_record(name, ok):
+    with _circuit_lock:
+        st = _circuit_state.setdefault(name, {'fails': 0, 'skip_until': 0})
+        if ok:
+            st['fails'] = 0
+            st['skip_until'] = 0
+        else:
+            st['fails'] += 1
+            if st['fails'] >= CIRCUIT_FAIL_THRESHOLD:
+                st['skip_until'] = time.time() + CIRCUIT_COOLDOWN_S
+
+
 def correct_sentence(text):
     # Walk PROVIDERS in order; a provider with no key configured costs
     # nothing (ordered_keys returns [] and _race short-circuits). Groq in
@@ -313,15 +346,29 @@ def correct_sentence(text):
     # your network settings" — likely this network's egress, not the keys
     # themselves — kept in the list only in case that clears on some network.
     all_errors = []
+    any_configured = False
+    any_circuit_skipped = False
     for provider in PROVIDERS:
         keys = ordered_keys(provider['env'])
         if not keys:
             continue
+        any_configured = True
+        if _circuit_should_skip(provider['name']):
+            any_circuit_skipped = True
+            continue
         result, errors = _race(lambda k, t, p=provider: call_provider(p, k, t), keys, text)
+        _circuit_record(provider['name'], result is not None)
         if result is not None:
             return result, None
         all_errors.extend(f"{provider['name']}: {e}" for e in errors)
-    return None, '; '.join(all_errors) or 'no API keys configured in .env'
+    if all_errors:
+        return None, '; '.join(all_errors)
+    if any_circuit_skipped:
+        return None, (f'all configured providers are in cooldown after repeated '
+                       f'failures (retrying automatically within {CIRCUIT_COOLDOWN_S}s)')
+    if not any_configured:
+        return None, 'no API keys configured in .env'
+    return None, 'unknown error — no provider was actually attempted'
 
 
 def doc_path(doc_id):
