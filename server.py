@@ -146,6 +146,30 @@ def call_gemini(base_url, model, key, text):
         return data['candidates'][0]['content']['parts'][0]['text'].strip()
 
 
+def call_anthropic(base_url, model, key, text):
+    """Anthropic's Messages API — its own shape too (x-api-key + an
+    anthropic-version header instead of a Bearer token, system as its own
+    top-level field, content as a list of typed blocks in the response)."""
+    req = urllib.request.Request(
+        base_url,
+        data=json.dumps({
+            'model': model,
+            'max_tokens': 300,
+            'temperature': 0,
+            'system': SYSTEM_PROMPT,
+            'messages': [{'role': 'user', 'content': text}],
+        }).encode('utf-8'),
+        headers={
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json',
+        },
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        data = json.loads(resp.read().decode('utf-8'))
+        return data['content'][0]['text'].strip()
+
+
 # Every provider we're willing to try, in priority order. Adding a new one
 # is just another entry here (plus its key(s) in .env) — no new function
 # needed unless its API shape isn't OpenAI-compatible (only Gemini so far
@@ -183,12 +207,36 @@ PROVIDERS = [
      'base_url': 'https://api.hyperbolic.xyz/v1/chat/completions', 'model': 'meta-llama/Llama-3.3-70B-Instruct'},
     {'name': 'sambanova', 'kind': 'openai', 'env': 'SAMBANOVA_API_KEY',
      'base_url': 'https://api.sambanova.ai/v1/chat/completions', 'model': 'Meta-Llama-3.1-8B-Instruct'},
+    {'name': 'anthropic', 'kind': 'anthropic', 'env': 'ANTHROPIC_API_KEY',
+     'base_url': 'https://api.anthropic.com/v1/messages', 'model': 'claude-haiku-4-5-20251001'},
+    {'name': 'perplexity', 'kind': 'openai', 'env': 'PERPLEXITY_API_KEY',
+     'base_url': 'https://api.perplexity.ai/chat/completions', 'model': 'sonar'},
+    {'name': 'xai', 'kind': 'openai', 'env': 'XAI_API_KEY',
+     'base_url': 'https://api.x.ai/v1/chat/completions', 'model': 'grok-4-fast'},
+    {'name': 'deepseek', 'kind': 'openai', 'env': 'DEEPSEEK_API_KEY',
+     'base_url': 'https://api.deepseek.com/chat/completions', 'model': 'deepseek-chat'},
+    {'name': 'moonshot', 'kind': 'openai', 'env': 'MOONSHOT_API_KEY',
+     'base_url': 'https://api.moonshot.ai/v1/chat/completions', 'model': 'moonshot-v1-8k'},
+    {'name': 'qwen', 'kind': 'openai', 'env': 'QWEN_API_KEY',
+     'base_url': 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', 'model': 'qwen-turbo'},
+    {'name': 'ai21', 'kind': 'openai', 'env': 'AI21_API_KEY',
+     'base_url': 'https://api.ai21.com/studio/v1/chat/completions', 'model': 'jamba-mini'},
+    {'name': 'nebius', 'kind': 'openai', 'env': 'NEBIUS_API_KEY',
+     'base_url': 'https://api.studio.nebius.ai/v1/chat/completions', 'model': 'meta-llama/Meta-Llama-3.1-8B-Instruct'},
+    {'name': 'scaleway', 'kind': 'openai', 'env': 'SCALEWAY_API_KEY',
+     'base_url': 'https://api.scaleway.ai/v1/chat/completions', 'model': 'llama-3.1-8b-instruct'},
+    {'name': 'lambda', 'kind': 'openai', 'env': 'LAMBDA_API_KEY',
+     'base_url': 'https://api.lambda.ai/v1/chat/completions', 'model': 'llama3.1-8b-instruct'},
+    {'name': 'featherless', 'kind': 'openai', 'env': 'FEATHERLESS_API_KEY',
+     'base_url': 'https://api.featherless.ai/v1/chat/completions', 'model': 'meta-llama/Meta-Llama-3.1-8B-Instruct'},
 ]
 
 
 def call_provider(provider, key, text):
     if provider['kind'] == 'gemini':
         return call_gemini(provider['base_url'], provider['model'], key, text)
+    if provider['kind'] == 'anthropic':
+        return call_anthropic(provider['base_url'], provider['model'], key, text)
     return call_openai_compatible(provider['base_url'], provider['model'], key, text)
 
 

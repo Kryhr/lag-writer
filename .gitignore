@@ -6,3 +6,4 @@ node_modules/
 .DS_Store
 tests/results.jsonl
 docs/
+__pycache__/
