@@ -16,13 +16,19 @@ export const CONTRACTIONS = {
   wheres: "where's", whens: "when's", mustnt: "mustn't",
   neednt: "needn't", shant: "shan't", aint: "ain't", yall: "y'all",
   oclock: "o'clock", mightnt: "mightn't", oughtnt: "oughtn't",
+  hed: "he'd", itll: "it'll", itd: "it'd", thatll: "that'll",
+  whatll: "what'll", whatd: "what'd", wholl: "who'll", whod: "who'd",
+  whyd: "why'd", howd: "how'd", hows: "how's", howll: "how'll",
 };
 
 // Deliberately NOT in the table above, even though each is a common
 // missing-apostrophe typo: "its"/"were"/"well"/"wed"/"lets"/"ma" are also
 // valid standalone words (possessive "its", past-tense "were", "well" as in
 // a well of water, "to wed", the verb "lets", "ma" as in mother), so a blind
-// dictionary swap would silently break correct sentences. That nuance is
+// dictionary swap would silently break correct sentences. Same reasoning
+// rules out a few more otherwise-tempting ones: "hell" (he'll vs. the place/
+// exclamation), "shed"/"shell" (she'd/she'll vs. a garden shed, a sea
+// shell), "whys" (why's vs. "the whys and wherefores"). That nuance is
 // exactly what the sentence-level LLM pass (see app.js) is for instead.
 
 export const SHORTHAND = {
@@ -252,6 +258,62 @@ export const TYPOS = {
   vunerable: "vulnerable", warrent: "warrant", wellcome: "welcome",
   wilingness: "willingness", withdrawl: "withdrawal", wondeful: "wonderful",
   yatch: "yacht",
+
+  // Fourth batch — extra variant misspellings of already-covered words
+  // (the same target word can be typo'd more than one way) plus a wide
+  // sweep of new business/everyday vocabulary. Skipped anywhere a
+  // "misspelling" is actually a real word with its own meaning (see the
+  // CONTRACTIONS comment above for the same principle) — e.g. never
+  // touching "complement/compliment", "principal/principle", "council/
+  // counsel", "patience/patients" pairs, since picking the wrong one
+  // requires knowing what the sentence means, not just how it's spelled.
+  seperately: "separately", seperation: "separation", accomodation: "accommodation",
+  accomodating: "accommodating", arguemnt: "argument", enviornment: "environment",
+  independantly: "independently", maintainence: "maintenance", ocassion: "occasion",
+  ocassionally: "occasionally", possesion: "possession", privelege: "privilege",
+  reccomend: "recommend", relavant: "relevant", tommorrow: "tomorrow",
+  tomorow: "tomorrow", commited: "committed", diferent: "different",
+  differant: "different", feburary: "february", intersted: "interested",
+  knowlegde: "knowledge", possable: "possible", preffered: "preferred",
+  questionnair: "questionnaire", secretery: "secretary", suprising: "surprising",
+  suprisingly: "surprisingly", supressed: "suppressed", supressing: "suppressing",
+  unfortunatley: "unfortunately", unbeleivable: "unbelievable", beleiving: "believing",
+  occurance: "occurrence", occuring: "occurring",
+
+  acomplishment: "accomplishment", aquaintance: "acquaintance",
+  adminstration: "administration", advertisment: "advertisement",
+  ambitous: "ambitious", anniversery: "anniversary", anounce: "announce",
+  anonymus: "anonymous", apreciate: "appreciate", apropriate: "appropriate",
+  architechture: "architecture", asemble: "assemble", assingment: "assignment",
+  assosiate: "associate", attatchment: "attachment", attorny: "attorney",
+  authorty: "authority", availible: "available", barier: "barrier",
+  beneficail: "beneficial", briliant: "brilliant", campain: "campaign",
+  canidate: "candidate", capasity: "capacity", certifcate: "certificate",
+  charecteristic: "characteristic", citzen: "citizen", civilzation: "civilization",
+  concidence: "coincidence", colaborate: "collaborate", comission: "commission",
+  comunicate: "communicate", comunity: "community", competant: "competent",
+  competion: "competition", consentrate: "concentrate", conferance: "conference",
+  confedence: "confidence", confidencial: "confidential", confermation: "confirmation",
+  consequense: "consequence", considerible: "considerable", conspiricy: "conspiracy",
+  consitution: "constitution", consultent: "consultant", contemperary: "contemporary",
+  converstation: "conversation", couragous: "courageous", curtesy: "courtesy",
+  credability: "credibility", currancy: "currency", curriculem: "curriculum",
+  democrasy: "democracy", deficency: "deficiency", depresion: "depression",
+  destenation: "destination", determenation: "determination", devistating: "devastating",
+  dialoge: "dialogue", dificulty: "difficulty", dimention: "dimension",
+  disablity: "disability", disagreament: "disagreement", discremination: "discrimination",
+  distrubution: "distribution", emergancy: "emergency", engagment: "engagement",
+  enourmous: "enormous", entreprenuer: "entrepreneur", equivelent: "equivalent",
+  eventualy: "eventually", excecution: "execution", expertice: "expertise",
+  extrordinary: "extraordinary", facilty: "facility", financal: "financial",
+  fortunant: "fortunate", generious: "generous", gorgeus: "gorgeous",
+  hospitalty: "hospitality", infrastucture: "infrastructure", innocant: "innocent",
+  insurence: "insurance", legeslation: "legislation", litrature: "literature",
+  manufature: "manufacture", morgage: "mortgage", motivaton: "motivation",
+  neighbohood: "neighborhood", nutriton: "nutrition", obsticle: "obstacle",
+  oponent: "opponent", organizaton: "organization", parliment: "parliament",
+  passanger: "passenger", pennalty: "penalty", permanant: "permanent",
+  philosphy: "philosophy", pregnency: "pregnancy", sofisticated: "sophisticated",
 };
 
 // Acronyms that are unambiguous typed lowercase (none of these have a real

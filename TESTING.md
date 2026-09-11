@@ -263,6 +263,39 @@ fix here; it should recover once quotas reset (daily), and it's a strong
 signal to go easier on repeated diagnostic testing against live keys —
 every test call spends real quota the user needs for actual usage.
 
+### Dictionary growth toward a much larger target (2026-09-11)
+
+User wants the local dictionary to eventually reach ~5,000 entries — the
+explicit goal being that for short/common words, "every possible
+misspelling" gets fixed instantly and deterministically, with zero AI
+usage spent on things that don't need judgment. Fourth expansion pass:
++148 entries (13 more safe contractions — he'd, it'll, it'd, that'll,
+what'll, what'd, who'll, who'd, why'd, how'd, how's, how'll — plus ~135
+more misspellings, including extra *variant* spellings of words already
+covered, e.g. both "tommorow" and "tomorow" now map to "tomorrow"). 877
+total entries, up from 729.
+
+The user raised the exact right caution unprompted: don't blindly
+"fix" something that might be intentional (their example: a word that
+looks like a typo for "essay" could actually be someone writing "SA" on
+purpose in a context like discussing sexual assault). Worth being
+explicit about how the existing design already handles this: the local
+dictionary only ever contains entries where the "wrong" spelling has
+*zero* legitimate standalone meaning — every batch has explicitly
+skipped real-word collisions (hell/he'll, shed or shell/she'd or she'll,
+whys/why's, and the already-documented its/were/well/lets/ma). Verified
+this holds with a direct test: hell, shed, shell, whys, essay,
+principal, council, and complement all correctly pass through
+untouched. This is precisely the mechanism that makes "it's a mini AI"
+safe rather than reckless — it only ever fires on inputs with one
+possible correct reading.
+
+Getting to 5,000 *safely* (not just padding with risky/low-value
+entries to hit a number) is real, ongoing work — each batch requires
+manually checking for real-word collisions, which doesn't scale to
+"just generate thousands." Treat the count as a direction, not a
+one-session target.
+
 ## Adding a new test case
 
 Add an entry to `tests/cases.json` with a unique `id`, the exact text,
